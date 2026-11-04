@@ -115,6 +115,14 @@ class EngieAPI:
     def authenticated(self) -> bool:
         return bool(self._session_dict().get("access_token"))
 
+    @property
+    def gas_api_diagnostics(self) -> dict[str, list[dict[str, Any]]]:
+        """Return redacted technical gas endpoint results when supported.
+
+        Safe with the existing PyPI ha-engie-api, which lacks this feature.
+        """
+        return getattr(self._client, "gas_api_diagnostics", {})
+
     async def async_get_prices(self) -> list[Any]:
         snapshot = await self.async_get_snapshot()
         return [item.price for item in snapshot.contracts]
