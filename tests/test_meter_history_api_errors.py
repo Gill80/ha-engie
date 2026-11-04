@@ -93,9 +93,6 @@ class MeterHistoryApiErrorTests(unittest.TestCase):
 
     def test_optional_polling_fallback_remains_compatible(self):
         client, _ = self.make_client(204)
-        with self.assertRaises(ApiError):
-            # Demonstrate what the optional wrapper must be allowed to absorb.
-            raise ApiError(403, "optional estimation is unavailable")
         self.assertEqual(
             client._try_json(
                 lambda: (_ for _ in ()).throw(ApiError(403, "optional"))
