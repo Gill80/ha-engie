@@ -19,6 +19,35 @@ HISTORY_MAX_DAYS = 3653  # bounded search up to roughly ten years
 PERIODS = ("90_days", "365_days", "all_available", "custom")
 
 
+def select_history_job(
+    jobs: dict[str, dict[str, Any]],
+    *,
+    job_id: str | None = None,
+    source_id: str | None = None,
+) -> dict[str, Any]:
+    """Return a defensive copy of one job, optionally scoped to a meter.
+
+    Only jobs explicitly associated with a meter are eligible for its sensor.
+    This avoids showing another meter's completed import on the wrong device.
+    """
+    if job_id:
+        job = jobs.get(job_id)
+        if job is None or (
+            source_id and source_id not in job.get("source_ids", ())
+        ):
+            return {"status": "not_found"}
+        return dict(job)
+    if source_id:
+        for job in reversed(list(jobs.values())):
+            if source_id in job.get("source_ids", ()):
+                return dict(job)
+        return {"status": "no_job"}
+    if not jobs:
+        return {"status": "no_job"}
+    return dict(jobs[next(reversed(jobs))])
+
+
+
 def plan_period(
     period: str,
     *,
