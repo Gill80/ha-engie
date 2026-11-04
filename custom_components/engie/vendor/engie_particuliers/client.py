@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+from dataclasses import replace
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -40,6 +41,7 @@ from .models import (
     ContractSnapshot,
     EnergyContract,
     Invoice,
+    MeterSourceSnapshot,
     SessionInfo,
     TariffCadran,
     PARIS,
@@ -935,6 +937,140 @@ class EngieClient:
                         ).strip("; ")
         return prices
 
+    def _meter_sources_for_compte(
+        self,
+        partner: Any,
+        cc: CompteContrat,
+        *,
+        prices: list[ContractPrice],
+        daily_by_energy: dict[str, list[ConsumptionPoint]],
+        daily_days: int,
+    ) -> list[MeterSourceSnapshot]:
+        """Discover every electric/gas meter for this exact compte contrat.
+
+        The ENGIE contract type is not authoritative for meter presence:
+        an active gas PCE can be returned by an electricity-listed account.
+        History from another account is never substituted here.
+        """
+        self.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
+        releve = self._try_json(
+            lambda: self.get_releve(partner.ref_bp, cc.numero_cc)
+        )
+        account_id = _account_id(partner.ref_bp, cc.numero_cc)
+        account_tail = str(cc.numero_cc)[-4:] or account_id[:4]
+        postal = cc.adresse.cp if cc.adresse else ""
+        sources: list[MeterSourceSnapshot] = []
+        for energy, energy_label, meter_label in (
+            ("ELEC", "Électricité", "PDL"),
+            ("GAZ", "Gaz", "PCE"),
+        ):
+            matching_contract = next(
+                (item for item in cc.contrats if _energy_kind(item) == energy),
+                None,
+            )
+            meter = _releve_contract(releve, energy)
+            meter_reference = "".join(
+                char for char in str(
+                    meter.get("idPDL")
+                    or meter.get("numPCE")
+                    or meter.get("numeroPCE")
+                    or ""
+                )
+                if char.isdecimal()
+            )
+            if len(meter_reference) not in range(10, 18):
+                meter_reference = ""
+            if matching_contract is None and not meter_reference:
+                continue
+
+            # Stable across sessions and account ordering, but unique to a
+            # physical meter. No full CC/PCE appears in entity IDs.
+            raw_source = (
+                f"{partner.ref_bp}|{cc.numero_cc}|{energy}|{meter_reference}"
+            )
+            source_id = "meter_" + hashlib.sha256(
+                raw_source.encode("utf-8")
+            ).hexdigest()[:20]
+            suffix = meter_reference[-4:] if meter_reference else ""
+            label = f"ENGIE · {energy_label} · CC …{account_tail}"
+            if suffix:
+                label += f" · {meter_label} …{suffix}"
+
+            self.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
+            # Legacy electricity is read from the correct account already.
+            # The legacy GAS contract may be redirected to a different PCE
+            # and must NEVER be reused for these source-specific sensors.
+            old_price = next(
+                (item for item in prices if item.energy == energy),
+                None,
+            )
+            if energy == "ELEC" and old_price is not None:
+                source_price = replace(old_price, contract_id=source_id)
+                recent = list(daily_by_energy.get("ELEC") or [])
+            else:
+                history = self._history_with_fallback(
+                    energy,
+                    ref_bp=partner.ref_bp,
+                    compte_contrat=cc.numero_cc,
+                    code_postal=postal,
+                    days=60,
+                    preferred_communicant=(
+                        bool(meter["compteurCommuniquant"])
+                        if "compteurCommuniquant" in meter
+                        else None
+                    ),
+                )
+                source_contract = EnergyContract(
+                    id=source_id,
+                    libelle=(
+                        matching_contract.libelle if matching_contract else energy_label
+                    ),
+                    type_energie=energy,
+                )
+                source_price = self._price_for_contract(
+                    source_contract,
+                    eco={},
+                    estimation_elec={},
+                    estimation_gaz={},
+                    histo={energy: history},
+                )
+                recent = self.get_consumption_points(
+                    energy,
+                    granularity="day",
+                    ref_bp=partner.ref_bp,
+                    compte_contrat=cc.numero_cc,
+                    code_postal=postal,
+                    days=daily_days,
+                )
+            sources.append(
+                MeterSourceSnapshot(
+                    source_id=source_id,
+                    account_id=account_id,
+                    energy=energy,
+                    display_name=label,
+                    account_suffix=account_tail,
+                    meter_suffix=suffix,
+                    declared_contract=matching_contract is not None,
+                    matched_selected_pce=bool(
+                        energy == "GAZ"
+                        and meter_reference
+                        and self._gas_pce_sha256
+                        and hmac.compare_digest(
+                            hashlib.sha256(meter_reference.encode("ascii")).hexdigest(),
+                            self._gas_pce_sha256,
+                        )
+                    ),
+                    price=source_price,
+                    last_day=_latest_consumption(recent, complete_only=True),
+                    today=next(
+                        (item for item in reversed(recent) if item.partial),
+                        None,
+                    ),
+                    recent_days=recent,
+                )
+            )
+        return sources
+
     def get_snapshot(
         self,
         account: AccountInfo | None = None,
@@ -947,6 +1083,7 @@ class EngieClient:
         gas_source = self._gas_source_for_account(account)
         contracts: list[ContractSnapshot] = []
         billing: list[BillingSnapshot] = []
+        meter_sources: list[MeterSourceSnapshot] = []
         for partner in account.partners:
             for cc in partner.comptes_contrat:
                 prices = self._prices_for_compte(
@@ -978,6 +1115,14 @@ class EngieClient:
                         code_postal=source_postal,
                         days=daily_days,
                     )
+                meter_sources.extend(
+                    self._meter_sources_for_compte(
+                        partner, cc,
+                        prices=prices,
+                        daily_by_energy=daily_by_energy,
+                        daily_days=daily_days,
+                    )
+                )
                 # Restore nominal account context for invoices and balances.
                 self.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
                 invoices_payload = self._try_json(
@@ -1019,7 +1164,11 @@ class EngieClient:
                             recent_days=recent,
                         )
                     )
-        return AccountSnapshot(contracts=contracts, billing=billing)
+        return AccountSnapshot(
+            contracts=contracts,
+            billing=billing,
+            meter_sources=meter_sources,
+        )
 
     def _find_contract(
         self, contract_id: str, account: AccountInfo | None = None
