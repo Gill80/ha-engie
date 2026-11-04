@@ -150,6 +150,7 @@ def probe_gas_mobile_headers_readonly(client: Any) -> dict[str, Any]:
                     "response_type", "history_field_type",
                     "history_row_count", "recognized_fields",
                     "data_field_type", "field_count",
+                    "security_error_class",
                 ):
                     if field in summary:
                         item[field] = summary[field]
