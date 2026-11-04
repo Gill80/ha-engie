@@ -87,10 +87,18 @@ class GasPceSourceTests(unittest.TestCase):
             self.assertEqual(gas.recent_days[0].kwh, 10)
             points = client.get_consumption_points_for_contract("G_ID", days=14)
             self.assertEqual(len(points), 1)
-            self.assertFalse(any(
+            # Legacy gas route stays linked to the selected active PCE.
+            # Independent meter-source discovery also examines the old
+            # account, but does not merge its data with the active meter.
+            self.assertTrue(any(
                 path.endswith("histoGazJours") and cc == "OLD"
                 for path, cc in calls
             ))
+            older = next(
+                source for source in snapshot.meter_sources
+                if source.energy == "GAZ" and source.account_suffix == "OLD"
+            )
+            self.assertEqual(len(older.recent_days), 0)
         finally:
             client.close()
 
