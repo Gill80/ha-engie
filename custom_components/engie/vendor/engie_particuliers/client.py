@@ -1369,6 +1369,17 @@ class EngieClient:
                 summary["response_type"] = "invalid_json"
             else:
                 summary["response_type"] = type(payload).__name__
+                # Android 10.31 explicitly treats these two 403 security
+                # errors differently. Report only the allowlisted class,
+                # never the raw status/message or error response.
+                if response.status_code == 403 and isinstance(payload, dict):
+                    raw_status = str(payload.get("status") or "")
+                    if "SEC_KO_EXPIRATION" in raw_status:
+                        summary["security_error_class"] = "expired"
+                    elif "SEC_KO_AUTHORISATION" in raw_status:
+                        summary["security_error_class"] = "unauthorized"
+                    else:
+                        summary["security_error_class"] = "other_or_unknown"
                 if isinstance(payload, dict):
                     summary["field_count"] = len(payload)
                     summary["recognized_fields"] = sorted(
