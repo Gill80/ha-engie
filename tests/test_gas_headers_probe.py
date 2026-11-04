@@ -65,7 +65,7 @@ class GasMobileHeaderProbeTests(unittest.TestCase):
                 observed.append(request)
                 if request.headers["User-Agent"].startswith("Mozilla/10.28.0"):
                     if path.endswith("estimationConsoGazMois"):
-                        return httpx.Response(403, json={"status": "denied"})
+                        return httpx.Response(403, json={"status": "SEC_KO_EXPIRATION"})
                     return httpx.Response(204)
                 if path.endswith("estimationConsoGazMois"):
                     return httpx.Response(200, json={"prixKwh": 0.075})
@@ -91,6 +91,7 @@ class GasMobileHeaderProbeTests(unittest.TestCase):
             [x["http_status"] for x in result["responses"]],
             [403, 200, 204, 200, 204, 200],
         )
+        self.assertEqual(result["responses"][0]["security_error_class"], "expired")
         self.assertTrue(result["cookie_presence"]["access_token"])
         self.assertTrue(result["cookie_presence"]["Cel_Cc"])
         self.assertTrue(result["cookie_presence"]["Cel_Bp"])
