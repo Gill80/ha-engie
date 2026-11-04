@@ -229,6 +229,29 @@ def _async_register_services(hass: HomeAssistant) -> None:
         **probe_kwargs,
     )
 
+    async def _probe_gas_across_accounts(call: ServiceCall) -> dict[str, Any]:
+        from .gas_cross_account_probe import probe_gas_across_accounts
+
+        digest = call.data["pce_sha256"]
+        for runtime in hass.data.get(DOMAIN, {}).values():
+            if isinstance(runtime, dict) and "api" in runtime:
+                api = runtime["api"]
+                await api.async_ensure_session()
+                return await api._run(
+                    probe_gas_across_accounts, api._client, digest
+                )
+        return {"error": "no_active_engie_session"}
+
+    hass.services.async_register(
+        DOMAIN,
+        "probe_gas_across_accounts",
+        _probe_gas_across_accounts,
+        schema=vol.Schema({
+            vol.Required("pce_sha256"): vol.Match(r"[0-9a-f]{64}")
+        }),
+        **probe_kwargs,
+    )
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -246,6 +269,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "probe_gas_headers")
         hass.services.async_remove(DOMAIN, "probe_gas_meter")
         hass.services.async_remove(DOMAIN, "dump_private_api")
+        hass.services.async_remove(DOMAIN, "probe_gas_across_accounts")
     return unload_ok
 
 
