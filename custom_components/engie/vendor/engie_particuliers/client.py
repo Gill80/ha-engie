@@ -183,6 +183,15 @@ def _account_id(ref_bp: str, numero_cc: str) -> str:
     return hashlib.sha256(f"{ref_bp}|{numero_cc}".encode()).hexdigest()[:16]
 
 
+_DISCOVERED_GAS_PREFIX = "detected_gas_"
+
+
+def _discovered_gas_id(ref_bp: str, numero_cc: str, pce: str) -> str:
+    """Stable non-reversible ID for metered gas not in the contract listing."""
+    digest = hashlib.sha256(f"{ref_bp}|{numero_cc}|{pce}".encode()).hexdigest()[:16]
+    return f"{_DISCOVERED_GAS_PREFIX}{digest}"
+
+
 def _normalize_energy(energy: str) -> str:
     blob = (energy or "").strip().upper()
     if blob in {"ELEC", "ELECTRICITY", "ELECTRICITE", "ÉLEC", "ÉLECTRICITÉ"}:
@@ -326,6 +335,9 @@ class EngieClient:
         self._oidc: Optional[dict[str, Any]] = None
         self._pending_mfa: Optional[dict[str, Any]] = None
         self._gas_api_diagnostics: dict[str, list[dict[str, Any]]] = {}
+        # Per-process route cache only; contains private account identifiers,
+        # so it is not included in diagnostic reports or persisted.
+        self._discovered_gas_routes: dict[str, tuple[str, str, str, str]] = {}
 
     def set_credentials(self, username: str, password: str) -> None:
         self._username = username.strip()
@@ -766,7 +778,19 @@ class EngieClient:
         days: int | None = None,
         account: AccountInfo | None = None,
     ) -> list[ConsumptionPoint]:
-        """Resolve a contract id then fetch histo for that energy."""
+        """Resolve a real or detected gas contract and fetch its history."""
+        route = self._discovered_gas_routes.get(contract_id)
+        if route is not None:
+            ref_bp, numero_cc, id_personne, postal = route
+            self.select_account(ref_bp, numero_cc, id_personne)
+            return self.get_consumption_points(
+                "GAZ",
+                granularity=granularity,
+                ref_bp=ref_bp,
+                compte_contrat=numero_cc,
+                code_postal=postal,
+                days=days,
+            )
         partner, cc, contract = self._find_contract(contract_id, account)
         self.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
         code_postal = cc.adresse.cp if cc.adresse else ""
@@ -827,7 +851,7 @@ class EngieClient:
                 code_postal=code_postal,
                 preferred_communicant=preferred,
             )
-        return [
+        prices = [
             self._price_for_contract(
                 contract,
                 eco=eco,
@@ -837,6 +861,53 @@ class EngieClient:
             )
             for contract in cc.contrats
         ]
+
+        # ENGIE may attach the active gas PCE to a contract account whose
+        # listeContrat contains ELEC only. Never misattribute its readings
+        # to a different, explicitly listed (possibly obsolete) gas contract.
+        meter = _releve_contract(releve, "GAZ")
+        pce = str(meter.get("idPDL") or "").strip()
+        if (
+            "GAZ" not in kinds
+            and pce.isdecimal()
+            and 10 <= len(pce) <= 17
+        ):
+            preferred = (
+                bool(meter["compteurCommuniquant"])
+                if "compteurCommuniquant" in meter
+                else None
+            )
+            gas_history = self._history_with_fallback(
+                "GAZ",
+                ref_bp=ref_bp,
+                compte_contrat=cc.numero_cc,
+                code_postal=code_postal,
+                preferred_communicant=preferred,
+                days=60,
+            )
+            if _latest_priced_row(_histo_rows(gas_history, "GAZ")):
+                virtual_id = _discovered_gas_id(ref_bp, cc.numero_cc, pce)
+                detected = EnergyContract(
+                    id=virtual_id,
+                    type="GAZ",
+                    libelle="Gaz - compteur actif detecte",
+                )
+                virtual_price = self._price_for_contract(
+                    detected,
+                    eco=eco,
+                    estimation_elec=estimation_elec,
+                    estimation_gaz={},  # do not borrow another account's tariff
+                    histo={"GAZ": gas_history},
+                )
+                virtual_price.notes += (
+                    "; Metered gas discovered on an account listed as electricity. "
+                    "Rate is inferred from gas consumption cost, not the contract tariff."
+                )
+                self._discovered_gas_routes[virtual_id] = (
+                    ref_bp, cc.numero_cc, id_personne, code_postal
+                )
+                prices.append(virtual_price)
+        return prices
 
     def get_snapshot(
         self,
@@ -853,7 +924,8 @@ class EngieClient:
             for cc in partner.comptes_contrat:
                 prices = self._prices_for_compte(partner.ref_bp, partner.id_personne, cc)
                 code_postal = cc.adresse.cp if cc.adresse else ""
-                kinds = {_energy_kind(contract) for contract in cc.contrats}
+                # Includes PCE-linked gas discovered on an ELEC-listed account.
+                kinds = {price.energy for price in prices}
                 daily_by_energy: dict[str, list[ConsumptionPoint]] = {}
                 for energy in ("ELEC", "GAZ"):
                     if energy not in kinds:
