@@ -10,7 +10,7 @@ All history operations are started by a user action, never at polling time.
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import timedelta
 import logging
 import re
 import secrets
@@ -158,7 +158,7 @@ async def _collect(
                 "energy": source.energy,
                 "source_id": source.source_id,
                 "requested_first": first.isoformat(),
-                "requested_last": (exclusive_end.fromordinal(exclusive_end.toordinal() - 1)).isoformat(),
+                "requested_last": (exclusive_end - timedelta(days=1)).isoformat(),
                 "windows": len(windows),
                 "daily_readings": len(fetched),
                 "daily_costs": present_costs,
