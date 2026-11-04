@@ -176,6 +176,47 @@ def reconcile_daily(
     }
 
 
+
+def preview_daily_rows(
+    existing: dict[str, Any],
+    fetched: dict[str, dict[str, float | None]],
+) -> list[dict[str, Any]]:
+    """Return a read-only daily comparison for a requested ENGIE interval.
+
+    This preview is transient; no daily results are sent to Home Assistant
+    entities, history, or Recorder. Missing days are not fabricated as zero.
+    """
+    rows: list[dict[str, Any]] = []
+    for day in sorted(fetched):
+        new = fetched[day]
+        previous = existing.get(day)
+        old = previous if isinstance(previous, dict) and previous.get("kwh") is not None else None
+        old_kwh = float(old["kwh"]) if old is not None else None
+        old_cost = (
+            float(old["cost_ttc"])
+            if old is not None and old.get("cost_ttc") is not None
+            else None
+        )
+        effective_cost = new.get("cost_ttc")
+        if effective_cost is None and old is not None:
+            effective_cost = old_cost
+        if old is None:
+            status = "new"
+        elif old_kwh != new["kwh"] or old_cost != effective_cost:
+            status = "corrected"
+        else:
+            status = "unchanged"
+        rows.append({
+            "date": day,
+            "kwh": new["kwh"],
+            "cost_ttc": new.get("cost_ttc"),
+            "status": status,
+            "previous_kwh": old_kwh if status == "corrected" else None,
+            "previous_cost_ttc": old_cost if status == "corrected" else None,
+        })
+    return rows
+
+
 def cumulative_statistics(
     rows: dict[str, dict[str, float | None]], *, stream: str
 ) -> list[dict[str, Any]]:
