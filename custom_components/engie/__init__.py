@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 
 try:
     from homeassistant.core import SupportsResponse
@@ -55,6 +56,23 @@ CLEAR_SCHEMA = vol.Schema(
         vol.Optional("include_costs", default=True): cv.boolean,
     }
 )
+
+# User-triggered import is always scoped to ENGIE physical meters; a selected
+# entity is checked against this integration's own entity registry IDs.
+METER_HISTORY_SCHEMA = vol.Schema({
+    vol.Optional("meter_entity"): cv.entity_id,
+    vol.Optional("meter_source_id"): vol.Match(r"^meter_[0-9a-f]{20}$"),
+    vol.Optional("period", default="365_days"): vol.In((
+        "90_days", "365_days", "all_available", "custom",
+    )),
+    vol.Optional("start_date"): cv.string,
+    vol.Optional("end_date"): cv.string,
+    vol.Optional("include_costs", default=True): cv.boolean,
+})
+
+METER_HISTORY_STATUS_SCHEMA = vol.Schema({
+    vol.Optional("job_id"): cv.string,
+})
 
 
 def _energies(values: list[str] | None) -> set[str] | None:
@@ -116,6 +134,11 @@ def _async_register_services(hass: HomeAssistant) -> None:
         for runtime in list(hass.data.get(DOMAIN, {}).values()):
             if not isinstance(runtime, dict) or "coordinator" not in runtime:
                 continue
+            if not bool(runtime["coordinator"].entry.options.get("legacy_contract_sensors", True)):
+                raise HomeAssistantError(
+                    "Legacy contract imports are disabled. Use "
+                    "engie.import_meter_history for the new meter groups."
+                )
             imported += await stats.async_import_history(
                 hass,
                 runtime["coordinator"],
@@ -160,6 +183,90 @@ def _async_register_services(hass: HomeAssistant) -> None:
         _clear_history,
         schema=CLEAR_SCHEMA,
         **register_kwargs,
+    )
+
+    # New, source-scoped actions. These create background jobs and return
+    # immediately, so "all available" does not block the HA action UI.
+    def _find_history_coordinator(data: dict[str, Any]) -> EngieCoordinator:
+        from homeassistant.helpers import entity_registry as entity_reg
+
+        runtimes = [
+            item for item in hass.data.get(DOMAIN, {}).values()
+            if isinstance(item, dict) and "coordinator" in item
+        ]
+        if not runtimes:
+            raise HomeAssistantError("No active ENGIE integration")
+        entity_id = data.get("meter_entity")
+        if entity_id:
+            entity = entity_reg.async_get(hass).async_get(entity_id)
+            if entity is None:
+                raise HomeAssistantError("Selected meter sensor was not found")
+            for item in runtimes:
+                if entity.config_entry_id == item["coordinator"].entry.entry_id:
+                    return item["coordinator"]
+            raise HomeAssistantError("Selected meter does not belong to ENGIE")
+        source_id = data.get("meter_source_id")
+        if source_id:
+            matching = [
+                item["coordinator"] for item in runtimes
+                if any(
+                    source.source_id == source_id
+                    for source in (
+                        getattr(item["coordinator"].data, "meter_sources", None) or []
+                    )
+                )
+            ]
+            if len(matching) == 1:
+                return matching[0]
+            raise HomeAssistantError("Unknown or ambiguous ENGIE meter ID")
+        if len(runtimes) != 1:
+            raise HomeAssistantError(
+                "More than one ENGIE integration: select a meter entity"
+            )
+        return runtimes[0]["coordinator"]
+
+    async def _history_action(call: ServiceCall, *, preview: bool) -> dict[str, Any]:
+        from .meter_history import start_history_job
+
+        coordinator = _find_history_coordinator(dict(call.data))
+        return start_history_job(
+            hass,
+            coordinator,
+            meter_entity=call.data.get("meter_entity"),
+            source_id=call.data.get("meter_source_id"),
+            period=call.data.get("period", "365_days"),
+            start_date=call.data.get("start_date"),
+            end_date=call.data.get("end_date"),
+            include_costs=call.data.get("include_costs", True),
+            preview_only=preview,
+        )
+
+    async def _preview_meter_history(call: ServiceCall) -> dict[str, Any]:
+        return await _history_action(call, preview=True)
+
+    async def _import_meter_history(call: ServiceCall) -> dict[str, Any]:
+        return await _history_action(call, preview=False)
+
+    async def _meter_history_status(call: ServiceCall) -> dict[str, Any]:
+        from .meter_history import get_history_job_status
+
+        coordinator = _find_history_coordinator({})
+        return get_history_job_status(hass, coordinator, call.data.get("job_id"))
+
+    hass.services.async_register(
+        DOMAIN, "preview_meter_history", _preview_meter_history,
+        schema=METER_HISTORY_SCHEMA, **register_kwargs,
+    )
+    hass.services.async_register(
+        DOMAIN, "import_meter_history", _import_meter_history,
+        schema=METER_HISTORY_SCHEMA, **register_kwargs,
+    )
+    status_kwargs: dict[str, Any] = {}
+    if SupportsResponse is not None:
+        status_kwargs["supports_response"] = SupportsResponse.ONLY
+    hass.services.async_register(
+        DOMAIN, "meter_history_status", _meter_history_status,
+        schema=METER_HISTORY_STATUS_SCHEMA, **status_kwargs,
     )
 
     async def _probe_gas(_call: ServiceCall) -> dict[str, Any]:
@@ -286,6 +393,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ):
         hass.services.async_remove(DOMAIN, SERVICE_IMPORT_HISTORY)
         hass.services.async_remove(DOMAIN, SERVICE_CLEAR_HISTORY)
+        hass.services.async_remove(DOMAIN, "preview_meter_history")
+        hass.services.async_remove(DOMAIN, "import_meter_history")
+        hass.services.async_remove(DOMAIN, "meter_history_status")
         hass.services.async_remove(DOMAIN, "probe_gas")
         hass.services.async_remove(DOMAIN, "probe_gas_headers")
         hass.services.async_remove(DOMAIN, "probe_gas_meter")
