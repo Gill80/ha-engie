@@ -55,6 +55,11 @@ class EngieCoordinator(DataUpdateCoordinator[AccountSnapshot]):
         return snapshot
 
     async def _async_sync_history(self, snapshot: AccountSnapshot) -> None:
+        # Source-only installation: no legacy contract statistics should
+        # continue to be imported for devices that were retired.
+        if not bool(self.entry.options.get("legacy_contract_sensors", True)):
+            self.async_set_updated_data(snapshot)
+            return
         from . import statistics as stats
 
         first = not self._history_bootstrapped
