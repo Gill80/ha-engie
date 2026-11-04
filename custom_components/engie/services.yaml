@@ -50,3 +50,7 @@ clear_import_history:
 probe_gas:
   name: Test gas API response (read-only)
   description: Compare four bounded gas history requests, returning HTTP codes and sanitized response shapes only. No entity, statistic, or credential changes.
+
+probe_gas_headers:
+  name: Probe gas session and mobile User-Agent (test only)
+  description: Compare six read-only ENGIE gas requests with 10.28.0 and 10.31.0 User-Agent values. Returns only HTTP codes, response metadata and booleans about known cookie names.
