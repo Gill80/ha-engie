@@ -171,6 +171,33 @@ class EngieAPI:
                 )
             raise
 
+    async def async_get_meter_source_points(
+        self,
+        source_id: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[ConsumptionPoint]:
+        """Get dated daily history for one independently discovered meter."""
+        await self.async_ensure_session()
+        try:
+            return await self._run(
+                self._client.get_consumption_points_for_meter_source,
+                source_id,
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+        except ApiError as err:
+            if getattr(err, "status_code", 0) in {401, 403}:
+                await self._async_refresh()
+                return await self._run(
+                    self._client.get_consumption_points_for_meter_source,
+                    source_id,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                )
+            raise
+
     async def async_close(self) -> None:
         await self._run(self._client.close)
 
