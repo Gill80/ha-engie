@@ -476,14 +476,54 @@ class ContractSnapshot:
 
 
 @dataclass
+class MeterSourceSnapshot:
+    """Readings for one distinct ENGIE account, energy and physical meter.
+
+    The public metadata uses masked reference suffixes only. source_id is
+    a stable hash and does not reveal the account or meter number.
+    """
+
+    source_id: str
+    account_id: str
+    energy: str
+    display_name: str
+    account_suffix: str
+    meter_suffix: str = ""
+    declared_contract: bool = False
+    matched_selected_pce: bool = False
+    price: ContractPrice | None = None
+    last_day: ConsumptionPoint | None = None
+    today: ConsumptionPoint | None = None
+    recent_days: list[ConsumptionPoint] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "account_id": self.account_id,
+            "energy": self.energy,
+            "display_name": self.display_name,
+            "account_suffix": self.account_suffix,
+            "meter_suffix": self.meter_suffix,
+            "declared_contract": self.declared_contract,
+            "matched_selected_pce": self.matched_selected_pce,
+            "price": _as_dict(self.price),
+            "last_day": _as_dict(self.last_day),
+            "today": _as_dict(self.today),
+            "recent_days": [_as_dict(item) for item in self.recent_days],
+        }
+
+
+@dataclass
 class AccountSnapshot:
-    """Coordinator payload: prices, recent consumption, and billing."""
+    """Coordinator payload: legacy contracts, distinct meters, and billing."""
 
     contracts: list[ContractSnapshot] = field(default_factory=list)
     billing: list[BillingSnapshot] = field(default_factory=list)
+    meter_sources: list[MeterSourceSnapshot] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "contracts": [_as_dict(item) for item in self.contracts],
             "billing": [_as_dict(item) for item in self.billing],
+            "meter_sources": [_as_dict(item) for item in self.meter_sources],
         }
