@@ -8,7 +8,12 @@ DOMAIN = "engie"
 MANUFACTURER = "ENGIE"
 ATTRIBUTION = "Data provided by ENGIE Particuliers"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SELECT,
+    Platform.BUTTON,
+]
 
 CONF_SESSION_STORE = "session"
 CONF_SCAN_INTERVAL = "scan_interval"
