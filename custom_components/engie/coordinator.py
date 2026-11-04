@@ -60,10 +60,21 @@ class EngieCoordinator(DataUpdateCoordinator[AccountSnapshot]):
         first = not self._history_bootstrapped
         self._history_bootstrapped = True
         try:
+            # On this *test branch* do not import/alter gas long-term
+            # statistics while validating the newly selected meter.
+            # Gas sensors can be inspected safely before explicit approval
+            # of the history backfill.
+            energy_filter = (
+                {"ELEC"} if self.entry.options.get("gas_pce_sha256") else None
+            )
             if first:
-                await stats.async_import_history(self.hass, self)
+                await stats.async_import_history(
+                    self.hass, self, energies=energy_filter
+                )
             else:
-                await stats.async_heal_recent(self.hass, self, snapshot)
+                await stats.async_heal_recent(
+                    self.hass, self, snapshot, energies=energy_filter
+                )
             self.async_set_updated_data(snapshot)
         except Exception:  # noqa: BLE001 — history import must not fail the poll
             if first:
