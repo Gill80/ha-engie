@@ -80,4 +80,9 @@ async def async_get_config_entry_diagnostics(
         },
         "contracts": contracts,
         "billing": billing,
+        # The library only supplies allowlisted schema keys and transport
+        # metadata; it never contains account IDs, tokens, URLs, or values.
+        "gas_api": (
+            coordinator.api.gas_api_diagnostics if coordinator is not None else {}
+        ),
     }
