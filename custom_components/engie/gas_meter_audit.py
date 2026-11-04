@@ -9,7 +9,6 @@ Avoid writing diagnostics to logs or to HA long-term statistics.
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import hmac
 import re
@@ -111,7 +110,7 @@ def audit_gas_meter_selection(client: Any, pce_sha256: str) -> dict[str, Any]:
     result["user_listing"] = _reference_match_summary(account.raw, pce_sha256)
 
     http = client._http_client()
-    original_cookies = copy.deepcopy(http.cookies)
+    original_cookies = httpx.Cookies(http.cookies)
     reports: list[dict[str, Any]] = []
     try:
         for index, (partner, cc) in enumerate(pairs[:6]):
