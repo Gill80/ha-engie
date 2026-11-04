@@ -332,6 +332,11 @@ class EngieClient:
         self._gas_pce_sha256: str = ""
         self._meter_source_mode = "all"
         self._selected_meter_source_ids: frozenset[str] = frozenset()
+        # Private routes populated by the most recent account discovery.
+        # Only hashed source keys are used outside this process.
+        self._meter_source_routes: dict[
+            str, tuple[str, str, str, str, str]
+        ] = {}
 
     def set_gas_pce_sha256(self, digest: str | None) -> None:
         """Select the actual gas meter by a locally configured PCE digest.
@@ -826,6 +831,33 @@ class EngieClient:
         daily.sort(key=lambda item: item.start or item.end)
         return daily
 
+    def get_consumption_points_for_meter_source(
+        self,
+        source_id: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[ConsumptionPoint]:
+        """Read the selected physical meter *on its own contract account*.
+
+        This method intentionally never falls back to the primary ENGIE
+        gas contract; an electricity-listed CC can host the active gas PCE.
+        """
+        route = self._meter_source_routes.get(source_id)
+        if route is None:
+            raise ValueError("Unknown meter source; refresh the account inventory")
+        ref_bp, numero_cc, id_personne, postal, energy = route
+        self.select_account(ref_bp, numero_cc, id_personne)
+        return self.get_consumption_points(
+            energy,
+            granularity="day",
+            ref_bp=ref_bp,
+            compte_contrat=numero_cc,
+            code_postal=postal,
+            start_ms=start_ms,
+            end_ms=end_ms,
+        )
+
     def get_consumption_points_for_contract(
         self,
         contract_id: str,
@@ -1006,6 +1038,9 @@ class EngieClient:
             source_id = "meter_" + hashlib.sha256(
                 raw_source.encode("utf-8")
             ).hexdigest()[:20]
+            self._meter_source_routes[source_id] = (
+                partner.ref_bp, cc.numero_cc, partner.id_personne, postal, energy
+            )
             suffix = meter_reference[-4:] if meter_reference else ""
             label = f"ENGIE · {energy_label} · CC …{account_tail}"
             if suffix:
