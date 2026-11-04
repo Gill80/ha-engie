@@ -34,6 +34,44 @@ custom, start_date et end_date sont des dates YYYY-MM-DD inclusives, antérieure
 au jour courant. Le paramètre include_costs permet de conserver ou d'exclure
 les coûts TTC.
 
+## Prévisualisation lisible dans le dashboard
+
+La prévisualisation **n'est plus seulement un dry-run**. Le fork embarque
+la carte Lovelace `custom:engie-history-preview-card` (sans CDN) :
+graphiques kWh/€ TTC, tableau jour par jour, filtres de plage et pagination,
+avec étiquettes « Nouvelle », « Déjà présente » et « Corrigée ».
+Lorsqu'une journée est corrigée, ses anciennes valeurs sont visibles.
+
+Pour l'installer, déclarer le module Lovelace
+`/engie/history-preview-card.js` dans les ressources, puis placer
+une carte par compteur :
+
+```yaml
+type: custom:engie-history-preview-card
+title: Prévisualisation du gaz
+meter_source_id: meter_0123456789abcdef0123  # remplacer par le vrai ID
+status_entity: sensor.engie_gaz_etat_de_recuperation_de_l_historique
+```
+
+Le bouton « Prévisualiser l'historique » reste sur chaque équipement.
+Après sa réussite, la carte lit les journées temporairement conservées
+dans la mémoire du processus Home Assistant via l'action de réponse
+`engie.meter_history_preview_data`, par tranches de 250 jours au maximum.
+La carte peut aussi être rafraîchie manuellement.
+
+**Protection :** pas d'écriture Recorder, ni de capteur contenant une
+liste de milliers de journées, ni de fichier public exportant les
+consommations. Les résultats sont limités aux compteurs découverts
+dans la configuration ENGIE, liés à la tâche prévisualisée, et
+disparaissent à un redémarrage. Il faut alors relancer la
+prévisualisation. Les valeurs ne sont affichées qu'aux utilisateurs
+authentifiés qui ont accès à Home Assistant.
+
+Les graphiques peuvent regrouper plusieurs journées pour conserver
+une lecture fluide sur un historique de plusieurs années. Le tableau
+reste détaillé par journée. Les jours non communiqués par ENGIE ne sont
+pas inventés comme des consommations nulles.
+
 ## Provenance et séparation des statistiques
 
 Pour une source identifiée par un identifiant de type meter_... :
