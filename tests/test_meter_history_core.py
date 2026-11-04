@@ -165,7 +165,7 @@ class MeterHistoryImportTests(unittest.TestCase):
 
     def test_source_statistic_ids_cannot_reference_other_integrations(self):
         implementation=(ROOT / "meter_history.py").read_text(encoding="utf-8")
-        self.assertIn('"_SAFE_ID = re.compile(', implementation.replace("_SAFE_ID = re.compile", '"_SAFE_ID = re.compile(') if False else implementation)
+        self.assertIn("_SAFE_ID = re.compile(", implementation)
         self.assertIn('r"^meter_[0-9a-f]{20}$"',implementation)
         self.assertIn('statistics_scope": "engie:meter_* only"',implementation)
         self.assertNotIn("sensor.lixee", implementation)
