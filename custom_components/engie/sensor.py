@@ -25,6 +25,7 @@ from .entity import (
     build_contract_device_info,
     build_meter_source_device_info,
 )
+from .meter_history import get_history_job_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +232,12 @@ async def async_setup_entry(
         for source in (snapshot.meter_sources if snapshot else []) or []:
             if mode == "selected" and source.source_id not in selected:
                 continue
+            status_id = f"{entry.entry_id}_{source.source_id}_history_job_status"
+            if status_id not in known:
+                known.add(status_id)
+                created.append(
+                    EngieMeterHistoryStatusSensor(coordinator, entry, source)
+                )
             if source.price is None:
                 continue
             # Avoid a synthetic "cumulative" meter. The historical 31-day
@@ -507,6 +514,70 @@ class EngieMeterSourceSensor(EngieContractSensor):
                     "meter_source": True,
                 }
             )
+        return attrs
+
+
+class EngieMeterHistoryStatusSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
+    """User-visible progress for this physical meter's on-demand history."""
+
+    _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:database-clock"
+
+    def __init__(
+        self, coordinator: EngieCoordinator, entry: ConfigEntry, source: Any
+    ) -> None:
+        super().__init__(coordinator)
+        self._source_id = source.source_id
+        self._attr_unique_id = (
+            f"{entry.entry_id}_{source.source_id}_history_job_status"
+        )
+        self._attr_name = "État de récupération de l'historique"
+        self._attr_device_info = build_meter_source_device_info(entry, source)
+
+    def _job(self) -> dict[str, Any]:
+        return get_history_job_status(
+            self.coordinator.hass, self.coordinator, source_id=self._source_id
+        )
+
+    @property
+    def native_value(self) -> str:
+        status = self._job().get("status", "no_job")
+        return {
+            "no_job": "Aucune tâche",
+            "running": "En cours",
+            "completed": "Terminée",
+            "failed": "Échec",
+            "not_found": "Aucune tâche",
+        }.get(status, "Inconnu")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        job = self._job()
+        attrs = {
+            key: job[key]
+            for key in (
+                "id",
+                "period_label",
+                "preview_only",
+                "windows_completed",
+                "window_count",
+                "error_type",
+                "http_status",
+            )
+            if key in job
+        }
+        count = job.get("window_count")
+        completed = job.get("windows_completed")
+        if type(count) is int and count > 0 and type(completed) is int:
+            attrs["progress_percent"] = round(100 * completed / count)
+        result = job.get("result")
+        if isinstance(result, dict):
+            attrs["new_or_corrected_days"] = result.get(
+                "new_or_corrected_days", 0
+            )
+            attrs["statistics_queued"] = result.get("statistics_queued", 0)
         return attrs
 
 
