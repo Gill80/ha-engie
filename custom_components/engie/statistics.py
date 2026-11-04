@@ -223,12 +223,18 @@ async def async_import_history(
 
 
 async def async_heal_recent(
-    hass: Any, coordinator: EngieCoordinator, snapshot: AccountSnapshot
+    hass: Any,
+    coordinator: EngieCoordinator,
+    snapshot: AccountSnapshot,
+    *,
+    energies: set[str] | None = None,
 ) -> int:
     """Overwrite the last few daily rows so late Linky data lands."""
     total = 0
     for item in snapshot.contracts:
         price = item.price
+        if energies and str(getattr(price, "energy", "")) not in energies:
+            continue
         contract_id = str(getattr(price, "contract_id", "") or "")
         if not contract_id:
             continue
