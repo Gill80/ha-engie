@@ -178,6 +178,29 @@ def _async_register_services(hass: HomeAssistant) -> None:
         **probe_kwargs,
     )
 
+    async def _probe_gas_meter(call: ServiceCall) -> dict[str, Any]:
+        # An in-memory SHA-256 comparison only: no PCE/PDL is passed as plain
+        # text, stored, printed, or included in the service response.
+        from .gas_meter_audit import audit_gas_meter_selection
+
+        digest = call.data["pce_sha256"]
+        for runtime in hass.data.get(DOMAIN, {}).values():
+            if isinstance(runtime, dict) and "api" in runtime:
+                api = runtime["api"]
+                await api.async_ensure_session()
+                return await api._run(audit_gas_meter_selection, api._client, digest)
+        return {"error": "no_active_engie_session"}
+
+    hass.services.async_register(
+        DOMAIN,
+        "probe_gas_meter",
+        _probe_gas_meter,
+        schema=vol.Schema({
+            vol.Required("pce_sha256"): vol.Match(r"[0-9a-f]{64}")
+        }),
+        **probe_kwargs,
+    )
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -193,6 +216,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_CLEAR_HISTORY)
         hass.services.async_remove(DOMAIN, "probe_gas")
         hass.services.async_remove(DOMAIN, "probe_gas_headers")
+        hass.services.async_remove(DOMAIN, "probe_gas_meter")
     return unload_ok
 
 
