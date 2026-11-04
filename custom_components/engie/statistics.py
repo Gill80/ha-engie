@@ -202,6 +202,10 @@ async def async_import_history(
         energy = str(getattr(price, "energy", "") or "")
         if not contract_id:
             continue
+        # Discovered gas meters are experimental: do not write or backfill
+        # long-term recorder statistics until the owner approves that scope.
+        if contract_id.startswith("detected_gas_"):
+            continue
         if contract_ids and contract_id not in contract_ids:
             continue
         if energies and energy not in energies:
@@ -231,6 +235,8 @@ async def async_heal_recent(
         price = item.price
         contract_id = str(getattr(price, "contract_id", "") or "")
         if not contract_id:
+            continue
+        if contract_id.startswith("detected_gas_"):
             continue
         recent = list(item.recent_days or [])
         if len(recent) > HISTORY_HEAL_DAYS:
@@ -302,6 +308,8 @@ async def async_clear_history(
         contract_id = str(getattr(price, "contract_id", "") or "")
         energy = str(getattr(price, "energy", "") or "")
         if not contract_id:
+            continue
+        if contract_id.startswith("detected_gas_"):
             continue
         if energies and energy not in energies:
             continue
