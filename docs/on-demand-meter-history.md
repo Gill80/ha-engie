@@ -11,6 +11,19 @@ Sur chaque appareil ENGIE Gaz ou Électricité :
 Les commandes démarrent une tâche en arrière-plan. Une notification Home Assistant
 annonce le résultat et l'action engie.meter_history_status donne la progression.
 
+Chaque équipement électrique ou gaz possède également le capteur de diagnostic
+**État de récupération de l'historique** : *Aucune tâche*, *En cours*,
+*Terminée* ou *Échec*. Ses attributs indiquent les fenêtres traitées, le
+pourcentage de progression, la période demandée et, en cas de problème, le
+type d'erreur et le code HTTP (sans afficher les données privées du compte).
+Les états des tâches sont conservés en mémoire et repartent sur *Aucune tâche*
+après un redémarrage de Home Assistant.
+
+Une seule tâche ENGIE est autorisée simultanément par configuration, pour
+éviter que plusieurs requêtes ne se disputent la même session et les cookies
+de sélection de compte. Si une tâche est déjà en cours, consultez le capteur
+d'état correspondant avant de relancer un import.
+
 Les actions avancées sont engie.preview_meter_history, engie.import_meter_history
 et engie.meter_history_status. Elles acceptent un meter_entity qui appartient
 à un appareil ENGIE, ou un meter_source_id technique. Sans filtre, elles
