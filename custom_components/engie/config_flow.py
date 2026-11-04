@@ -277,8 +277,9 @@ class EngieOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=options)
         current = self.config_entry.options
         choices = self._meter_source_choices()
-        current_selection = list(
-            current.get("selected_meter_sources") or choices.keys()
+        stored_selection = current.get("selected_meter_sources")
+        current_selection = (
+            list(choices) if stored_selection is None else list(stored_selection)
         )
         current_selection = [
             source_id for source_id in current_selection if source_id in choices
