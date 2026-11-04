@@ -14,6 +14,8 @@ try:
 except ImportError:  # pragma: no cover - Home Assistant < 2023.8
     SupportsResponse = None
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.storage import Store
 
 from .api import EngieAPI
@@ -79,6 +81,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     _async_register_services(hass)
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    """Permit removal of legacy contract devices only when fully retired.
+
+    Device sources and the parent account must never be removable through
+    this migration callback. An empty legacy device may be removed only
+    after the user explicitly disables old contract-based sensors.
+    """
+    if bool(config_entry.options.get("legacy_contract_sensors", True)):
+        return False
+    if not any(
+        domain == DOMAIN and identity.startswith("contract_")
+        for domain, identity in device_entry.identifiers
+    ):
+        return False
+    return not er.async_entries_for_device(er.async_get(hass), device_entry.id)
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
