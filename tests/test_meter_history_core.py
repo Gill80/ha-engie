@@ -225,5 +225,46 @@ class MeterHistoryJobStatusTests(unittest.TestCase):
         self.assertIn('"source_ids": [source.source_id for source in sources]', history)
 
 
+class MeterHistoryVisiblePreviewTests(unittest.TestCase):
+    def test_daily_preview_marks_new_same_and_corrected(self):
+        m = _module()
+        existing = {
+            "2026-11-01": {"kwh": 5.0, "cost_ttc": 1.0},
+            "2026-11-02": {"kwh": 6.0, "cost_ttc": 1.2},
+            "2026-11-03": {"kwh": 7.0, "cost_ttc": 1.4},
+        }
+        fetched = {
+            "2026-11-01": {"kwh": 5.0, "cost_ttc": 1.0},
+            "2026-11-02": {"kwh": 8.0, "cost_ttc": 1.3},
+            "2026-11-03": {"kwh": 7.0, "cost_ttc": None},
+            "2026-11-04": {"kwh": 9.0, "cost_ttc": None},
+        }
+        original = {day: dict(values) for day, values in existing.items()}
+        original_fetched = {day: dict(values) for day, values in fetched.items()}
+        rows = m.preview_daily_rows(existing, fetched)
+        self.assertEqual(
+            [row["status"] for row in rows],
+            ["unchanged", "corrected", "unchanged", "new"],
+        )
+        self.assertEqual(rows[1]["previous_kwh"], 6.0)
+        self.assertEqual(rows[1]["previous_cost_ttc"], 1.2)
+        self.assertIsNone(rows[3]["cost_ttc"])
+        self.assertEqual(existing, original)
+        self.assertEqual(fetched, original_fetched)
+
+    def test_preview_and_job_service_are_separate_from_recorder(self):
+        code = (ROOT / "meter_history.py").read_text(encoding="utf-8")
+        self.assertIn("def get_history_preview_data(", code)
+        self.assertIn('report["_preview_rows"]', code)
+        self.assertIn('result.pop("_preview_rows", None)', code)
+        self.assertIn('runtime.setdefault("meter_history_previews", {})', code)
+        self.assertIn('return {"status": "no_preview", "rows": [], "total": 0}', code)
+        init = (ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('DOMAIN, "meter_history_preview_data"', init)
+        self.assertIn('"/engie/history-preview-card.js"', init)
+        card = ROOT / "www" / "history-preview-card.js"
+        self.assertTrue(card.is_file())
+
+
 if __name__ == "__main__":
     unittest.main()
