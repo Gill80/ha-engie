@@ -44,8 +44,13 @@
       "init": {
         "title": "ENGIE Particuliers options",
         "data": {
-          "scan_interval": "Price refresh interval (seconds)"
-        }
+          "scan_interval": "Price refresh interval (seconds)",
+          "gas_pce": "Preferred gas PCE (14 digits)",
+          "clear_gas_pce": "Clear preferred gas PCE",
+          "meter_source_mode": "Meter sources to monitor",
+          "selected_meter_sources": "Meter sources to follow (manual selection)"
+        },
+        "description": "An independent device is detected for each ENGIE account and energy. All follows every detected meter; Selected monitors only chosen meters. Existing contract sensors are preserved."
       }
     }
   },
@@ -63,78 +68,78 @@
       "cadran_price_kwh_ttc": {
         "name": "{cadran} price kWh TTC"
       },
-            "cadran_price_kwh_ht": {
-                "name": "{cadran} price kWh HT"
-            },
-            "last_day_kwh": {
-                "name": "Daily consumption"
-            },
-            "last_day_cost": {
-                "name": "Daily cost TTC"
-            },
-            "daily_consumption": {
-                "name": "Daily consumption"
-            },
-            "daily_cost": {
-                "name": "Daily cost TTC"
-            },
-            "today_consumption": {
-                "name": "Today consumption"
-            },
-            "energy": {
-                "name": "Energy"
-            },
-            "balance": {
-                "name": "Outstanding balance"
-            },
-            "next_invoice": {
-                "name": "Next invoice"
-            },
-            "last_invoice": {
-                "name": "Last invoice TTC"
-            }
-        },
-        "binary_sensor": {
-            "authentication": {
-                "name": "Authenticated"
-            },
-            "energy_cut": {
-                "name": "Supply cut"
-            }
-        }
+      "cadran_price_kwh_ht": {
+        "name": "{cadran} price kWh HT"
+      },
+      "last_day_kwh": {
+        "name": "Daily consumption"
+      },
+      "last_day_cost": {
+        "name": "Daily cost TTC"
+      },
+      "daily_consumption": {
+        "name": "Daily consumption"
+      },
+      "daily_cost": {
+        "name": "Daily cost TTC"
+      },
+      "today_consumption": {
+        "name": "Today consumption"
+      },
+      "energy": {
+        "name": "Energy"
+      },
+      "balance": {
+        "name": "Outstanding balance"
+      },
+      "next_invoice": {
+        "name": "Next invoice"
+      },
+      "last_invoice": {
+        "name": "Last invoice TTC"
+      }
     },
-    "services": {
-        "import_history": {
-            "name": "Import consumption history",
-            "description": "Import daily electricity and gas consumption into long-term statistics for the Energy dashboard.",
-            "fields": {
-                "energy": {
-                    "name": "Energy",
-                    "description": "Energies to import. Leave empty for every contract."
-                },
-                "days": {
-                    "name": "Days",
-                    "description": "How far back to fetch daily history."
-                },
-                "include_costs": {
-                    "name": "Include costs",
-                    "description": "Also import billed euro TTC as a cost statistic."
-                }
-            }
-        },
-        "clear_import_history": {
-            "name": "Clear imported history",
-            "description": "Delete ENGIE long-term statistics previously imported into the recorder.",
-            "fields": {
-                "energy": {
-                    "name": "Energy",
-                    "description": "Energies to clear. Leave empty for every contract."
-                },
-                "include_costs": {
-                    "name": "Include costs",
-                    "description": "Also delete imported cost statistics."
-                }
-            }
-        }
+    "binary_sensor": {
+      "authentication": {
+        "name": "Authenticated"
+      },
+      "energy_cut": {
+        "name": "Supply cut"
+      }
     }
+  },
+  "services": {
+    "import_history": {
+      "name": "Import consumption history",
+      "description": "Import daily electricity and gas consumption into long-term statistics for the Energy dashboard.",
+      "fields": {
+        "energy": {
+          "name": "Energy",
+          "description": "Energies to import. Leave empty for every contract."
+        },
+        "days": {
+          "name": "Days",
+          "description": "How far back to fetch daily history."
+        },
+        "include_costs": {
+          "name": "Include costs",
+          "description": "Also import billed euro TTC as a cost statistic."
+        }
+      }
+    },
+    "clear_import_history": {
+      "name": "Clear imported history",
+      "description": "Delete ENGIE long-term statistics previously imported into the recorder.",
+      "fields": {
+        "energy": {
+          "name": "Energy",
+          "description": "Energies to clear. Leave empty for every contract."
+        },
+        "include_costs": {
+          "name": "Include costs",
+          "description": "Also delete imported cost statistics."
+        }
+      }
+    }
+  }
 }
