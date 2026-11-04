@@ -99,6 +99,32 @@ HP / HC bands are extra sensors. The Energy dashboard still takes **one** curren
 
 In the integration options you can change the poll interval (seconds, 5 minutes to 24 hours). Default is 6 hours.
 
+## Gas diagnostics (Gill80 fork)
+
+If ENGIE's app shows gas usage while this integration reports
+`unknown`, inspect **Settings → Devices & services → ENGIE
+Particuliers → Download diagnostics** (or use `ha_get_integration`
+with diagnostics). The `gas_api` field records up to six recent
+technical results per endpoint:
+
+- `estimationConsoGazMois`: gas price estimation
+- `histoGazMois`: monthly gas consumption
+- `histoGazJours`: daily gas consumption
+
+It includes HTTP status and a limited, allowlisted response shape, but
+never API values, URLs, contract identifiers or tokens. A missing or
+empty `gas_api` field means the installed Python library does not yet
+support this feature or no gas endpoint has been called.
+
+**Deployment caveat:** this integration still requests
+`ha-engie-api>=0.2.1` from PyPI. Installing only this fork **does
+not** install the matching `Gill80/ha-engie-api` branch. Both halves
+must be tested together via a separately approved package/deployment
+strategy. The forks do not alter an existing HA installation.
+
+The `unit_class` metadata fix also supplies an explicit `None` for
+monetary external statistics, as required by Home Assistant 2026.11.
+
 ## Limitations
 
 - Unofficial API — ENGIE may change it
