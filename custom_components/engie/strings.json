@@ -48,7 +48,8 @@
           "gas_pce": "Preferred gas PCE (14 digits)",
           "clear_gas_pce": "Clear preferred gas PCE",
           "meter_source_mode": "Meter sources to monitor",
-          "selected_meter_sources": "Meter sources to follow (manual selection)"
+          "selected_meter_sources": "Meter sources to follow (manual selection)",
+          "legacy_contract_sensors": "Keep old contract-based sensors (migration)"
         },
         "description": "An independent device is detected for each ENGIE account and energy. All follows every detected meter; Selected monitors only chosen meters. Existing contract sensors are preserved."
       }
