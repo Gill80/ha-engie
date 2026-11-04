@@ -181,5 +181,49 @@ class MeterHistoryImportTests(unittest.TestCase):
         self.assertIn('"all_available"',select)
 
 
+class MeterHistoryJobStatusTests(unittest.TestCase):
+    def test_last_job_is_scoped_to_its_meter(self):
+        m = _module()
+        gas = "meter_" + "a" * 20
+        elec = "meter_" + "b" * 20
+        jobs = {
+            "first": {"id": "first", "status": "completed", "source_ids": [gas]},
+            "second": {"id": "second", "status": "running", "source_ids": [elec]},
+            "third": {"id": "third", "status": "failed", "source_ids": [gas]},
+        }
+        self.assertEqual(m.select_history_job(jobs, source_id=gas)["id"], "third")
+        self.assertEqual(m.select_history_job(jobs, source_id=elec)["id"], "second")
+        self.assertEqual(m.select_history_job(jobs)["id"], "third")
+        self.assertEqual(
+            m.select_history_job(jobs, job_id="second", source_id=gas),
+            {"status": "not_found"},
+        )
+
+    def test_empty_or_unknown_job_and_defensive_copy(self):
+        m = _module()
+        gas = "meter_" + "a" * 20
+        self.assertEqual(m.select_history_job({}), {"status": "no_job"})
+        jobs = {"one": {"status": "running", "source_ids": [gas]}}
+        self.assertEqual(
+            m.select_history_job(jobs, source_id="meter_" + "c" * 20),
+            {"status": "no_job"},
+        )
+        self.assertEqual(
+            m.select_history_job(jobs, job_id="absent"),
+            {"status": "not_found"},
+        )
+        copy = m.select_history_job(jobs, source_id=gas)
+        copy["status"] = "failed"
+        self.assertEqual(jobs["one"]["status"], "running")
+
+    def test_source_status_sensor_is_registered(self):
+        sensor = (ROOT / "sensor.py").read_text(encoding="utf-8")
+        history = (ROOT / "meter_history.py").read_text(encoding="utf-8")
+        self.assertIn("class EngieMeterHistoryStatusSensor(", sensor)
+        self.assertIn("source_id=self._source_id", sensor)
+        self.assertIn('coordinator.async_update_listeners()', history)
+        self.assertIn('"source_ids": [source.source_id for source in sources]', history)
+
+
 if __name__ == "__main__":
     unittest.main()
