@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Any
@@ -240,7 +241,18 @@ class EngieOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            options = dict(user_input)
+            gas_pce = str(options.pop("gas_pce", "") or "").strip()
+            clear_gas_pce = bool(options.pop("clear_gas_pce", False))
+            if gas_pce:
+                options["gas_pce_sha256"] = hashlib.sha256(
+                    gas_pce.encode("ascii")
+                ).hexdigest()
+            elif not clear_gas_pce:
+                existing = self.config_entry.options.get("gas_pce_sha256")
+                if existing:
+                    options["gas_pce_sha256"] = existing
+            return self.async_create_entry(title="", data=options)
         current = self.config_entry.options
         return self.async_show_form(
             step_id="init",
@@ -252,6 +264,8 @@ class EngieOptionsFlowHandler(config_entries.OptionsFlow):
                             current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
                         ),
                     ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+                    vol.Optional("gas_pce"): vol.All(str, vol.Match(r"^[0-9]{14}$")),
+                    vol.Optional("clear_gas_pce", default=False): bool,
                 }
             ),
         )
