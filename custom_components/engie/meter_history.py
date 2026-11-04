@@ -29,6 +29,7 @@ from .meter_history_core import (
     normalize_daily_points,
     plan_period,
     reconcile_daily,
+    select_history_job,
     windows_reverse,
 )
 from .statistics import _metadata, statistic_id
@@ -269,7 +270,9 @@ def start_history_job(
     runtime = _runtime(hass, coordinator)
     jobs: dict[str, Any] = runtime.setdefault("meter_history_jobs", {})
     if any(j.get("status") == "running" for j in jobs.values()):
-        raise HomeAssistantError("An ENGIE history job is already running")
+        raise HomeAssistantError(
+            "Une récupération ENGIE est déjà en cours. Consultez son capteur d'état."
+        )
 
     job_id = secrets.token_hex(6)
     job: dict[str, Any] = {
@@ -279,6 +282,7 @@ def start_history_job(
         "period": period,
         "period_label": _PERIOD_LABEL[period],
         "meters": [source.display_name for source in sources],
+        "source_ids": [source.source_id for source in sources],
         "window_count": len(windows_reverse(first, end)) * len(sources),
         "windows_completed": 0,
         "result": None,
@@ -292,6 +296,7 @@ def start_history_job(
     def progress(done: int, total: int) -> None:
         job["windows_completed"] = done
         job["window_count"] = total
+        coordinator.async_update_listeners()
 
     async def work() -> None:
         try:
@@ -327,6 +332,7 @@ def start_history_job(
                 "Consultez l'action engie.meter_history_status pour le suivi.",
                 "ENGIE · Import d'historique",
             )
+            coordinator.async_update_listeners()
             return
         job["status"] = "completed"
         job["result"] = result
@@ -349,7 +355,9 @@ def start_history_job(
             ),
             title,
         )
+        coordinator.async_update_listeners()
 
+    coordinator.async_update_listeners()
     hass.async_create_task(work(), name=f"engie_meter_history_{job_id}")
     return {
         "job_id": job_id,
@@ -362,15 +370,12 @@ def start_history_job(
 
 
 def get_history_job_status(
-    hass: HomeAssistant, coordinator: Any, job_id: str | None = None
+    hass: HomeAssistant,
+    coordinator: Any,
+    job_id: str | None = None,
+    *,
+    source_id: str | None = None,
 ) -> dict[str, Any]:
-    """Read the latest or specified job status, no private values."""
+    """Read the latest or specified job status, optionally per meter."""
     jobs = _runtime(hass, coordinator).get("meter_history_jobs", {})
-    if not jobs:
-        return {"status": "no_job"}
-    if not job_id:
-        job_id = next(reversed(jobs))
-    job = jobs.get(job_id)
-    if job is None:
-        return {"status": "not_found"}
-    return dict(job)
+    return select_history_job(jobs, job_id=job_id, source_id=source_id)
