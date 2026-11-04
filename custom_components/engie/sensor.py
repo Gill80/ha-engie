@@ -207,17 +207,23 @@ async def async_setup_entry(
     def _entities() -> list[SensorEntity]:
         created: list[SensorEntity] = []
         snapshot = _snapshot(coordinator)
-        for item in (snapshot.contracts if snapshot else []) or []:
-            price = item.price
-            contract_id = str(getattr(price, "contract_id", "") or "")
-            if not contract_id:
-                continue
-            for spec in _iter_specs(price):
-                unique_id = f"{entry.entry_id}_{contract_id}_{spec.unique_suffix}"
-                if unique_id in known:
+        # Optional migration away from contract-centric sensors.
+        # Keeping the old unique IDs registered is a user choice; it is
+        # safe to switch to source-only devices once dashboards are migrated.
+        if bool(entry.options.get("legacy_contract_sensors", True)):
+            for item in (snapshot.contracts if snapshot else []) or []:
+                price = item.price
+                contract_id = str(getattr(price, "contract_id", "") or "")
+                if not contract_id:
                     continue
-                known.add(unique_id)
-                created.append(EngieContractSensor(coordinator, entry, contract_id, spec))
+                for spec in _iter_specs(price):
+                    unique_id = f"{entry.entry_id}_{contract_id}_{spec.unique_suffix}"
+                    if unique_id in known:
+                        continue
+                    known.add(unique_id)
+                    created.append(
+                        EngieContractSensor(coordinator, entry, contract_id, spec)
+                    )
         # Separate devices for each physical account/energy source.
         # Legacy contract entities retain their old unique IDs and devices.
         mode = str(entry.options.get("meter_source_mode") or "all")
