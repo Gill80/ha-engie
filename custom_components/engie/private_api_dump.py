@@ -172,7 +172,7 @@ def dump_engie_api_private(
     """Store a bounded *complete body* dump on HA; return only a schema report.
 
     The request is read-only on ENGIE. Uses at most 12 requests when there are
-    <= 4 accounts and <= 2 gas accounts. Does not persist query parameters.
+    <= 4 accounts and <= 4 gas/matched accounts. Does not persist query parameters.
     """
     if not re.fullmatch(r"[0-9a-f]{64}", pce_digest):
         raise ValueError("Expected lowercase SHA-256 of the user's gas PCE")
@@ -235,18 +235,30 @@ def dump_engie_api_private(
                 )
                 data.append(record)
 
-        # Request a real calendar October 2026 month in Europe/Paris, plus
-        # a normal rolling window, to distinguish aligned vs rolling queries.
-        # Only run these for actual gas accounts in the retrieved listing.
+        # Query gas history for the PCE-matching meter account even when
+        # the listing identifies the account as electricity.
+        pce_account_indexes = {
+            item["account_index"]
+            for item in data
+            if item["endpoint"] == "recupererDonneesReleveV2"
+            and _match_pce(item["body"], pce_digest)["pce_match"]
+        }
+        result["accounts_matching_pce"] = len(pce_account_indexes)
+        candidate_indexes = [
+            index for index, (partner, cc) in enumerate(all_pairs[:4])
+            if index in pce_account_indexes
+            or any(_energy_kind(c) == "GAZ" for c in cc.contrats)
+        ]
+        result["gas_history_context_accounts"] = len(candidate_indexes)
+
+        # Same rolling/calendar periods for all candidate accounts.
         oct_start = datetime(2026, 10, 1, tzinfo=PARIS)
         nov_start = datetime(2026, 11, 1, tzinfo=PARIS)
         calendar_from = int(oct_start.timestamp() * 1000)
         calendar_to = int(nov_start.timestamp() * 1000)
-        for partner, cc in gas_accounts[:2]:
-            index = next(
-                i for i, pair in enumerate(all_pairs)
-                if pair[0] is partner and pair[1] is cc
-            )
+        for index in candidate_indexes:
+            partner, cc = all_pairs[index]
+            pce_match = index in pce_account_indexes
             client.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
             basic = {"refBP": partner.ref_bp, "compteContrat": cc.numero_cc}
             postal = cc.adresse.cp if cc.adresse else ""
@@ -256,6 +268,7 @@ def dump_engie_api_private(
                 basic,
             )
             estimate["account_index"] = index
+            estimate["account_pce_match"] = pce_match
             data.append(estimate)
             for grain in ("month", "day"):
                 rolling_start, rolling_end = _range_ms(
@@ -277,6 +290,7 @@ def dump_engie_api_private(
                         params["communicant"] = "true"
                     record = _read(client, path, params)
                     record["account_index"] = index
+                    record["account_pce_match"] = pce_match
                     record["date_range_mode"] = mode
                     record["granularity"] = grain
                     data.append(record)
@@ -291,6 +305,7 @@ def dump_engie_api_private(
         summary = {
             "endpoint": record["endpoint"],
             "account_index": record.get("account_index"),
+            "account_pce_match": record.get("account_pce_match"),
             "date_range_mode": record.get("date_range_mode"),
             "http_status": record.get("http_status"),
             "body_type": record["response_body_type"],
