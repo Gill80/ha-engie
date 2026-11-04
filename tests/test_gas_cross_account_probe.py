@@ -111,6 +111,57 @@ class CrossAccountTests(unittest.TestCase):
         finally:
             client.close()
 
+    def test_detected_gas_meter_remains_separate_from_other_contract(self):
+        _load()
+        from _cross_test.vendor.engie_particuliers.client import EngieClient
+        from _cross_test.vendor.engie_particuliers.models import (
+            CompteContrat, EnergyContract,
+        )
+
+        client = EngieClient()
+        client.select_account = lambda *args: None
+        client.get_releve = lambda *args: {
+            "contratGaz": {"idPDL": "7" * 14, "compteurCommuniquant": True}
+        }
+        client.get_eco_gestes = lambda *args: {"prixKwh": 0.19}
+        client.get_estimation_elec = lambda *args: {}
+        client.get_estimation_gaz = lambda *args: {}
+        client._history_with_fallback = lambda energy, **kwargs: (
+            {"historiquesGaz": [
+                {"conso": 100, "consoEuroTTC": 12.5,
+                 "dateDebut": "2026-10-01", "dateFin": "2026-10-31"}
+            ]} if energy == "GAZ" else {}
+        )
+        cc = CompteContrat(
+            numero_cc="fictional-account",
+            contrats=[EnergyContract(id="electric", type_energie="ELEC")]
+        )
+        prices = client._prices_for_compte("fictional-bp", "fictional-person", cc)
+        self.assertEqual(len(prices), 2)
+        self.assertEqual(prices[0].energy, "ELEC")
+        self.assertEqual(prices[1].energy, "GAZ")
+        self.assertAlmostEqual(prices[1].price_kwh_ttc, 0.125)
+        self.assertTrue(prices[1].contract_id.startswith("detected_gas_"))
+        self.assertIn(prices[1].contract_id, client._discovered_gas_routes)
+
+    def test_no_discovery_without_gas_history(self):
+        _load()
+        from _cross_test.vendor.engie_particuliers.client import EngieClient
+        from _cross_test.vendor.engie_particuliers.models import CompteContrat, EnergyContract
+
+        client = EngieClient()
+        client.select_account = lambda *args: None
+        client.get_releve = lambda *args: {"contratGaz": {"idPDL": "7" * 14}}
+        client.get_eco_gestes = lambda *args: {}
+        client.get_estimation_elec = lambda *args: {}
+        client.get_estimation_gaz = lambda *args: {}
+        client._history_with_fallback = lambda *args, **kwargs: {}
+        cc = CompteContrat(
+            numero_cc="fictional",
+            contrats=[EnergyContract(id="electric", type_energie="ELEC")]
+        )
+        self.assertEqual(len(client._prices_for_compte("bp", "person", cc)), 1)
+
     def test_invalid_hash_fails_before_request(self):
         with self.assertRaises(ValueError):
             _load().probe_gas_across_accounts(object(), "not_a_digest")
