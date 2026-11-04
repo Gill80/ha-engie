@@ -62,8 +62,9 @@ def _metadata(contract_id: str, stream: str, name: str) -> StatisticMetaData:
         "statistic_id": statistic_id(contract_id, stream),
         "unit_of_measurement": unit,
     }
-    if unit_class:
-        kwargs["unit_class"] = unit_class
+    # Home Assistant 2026.11 requires the key even for monetary statistics,
+    # for which there is no unit-conversion class (None is intentional).
+    kwargs["unit_class"] = unit_class
     try:
         from homeassistant.components.recorder.models import StatisticMeanType
 
