@@ -42,6 +42,8 @@ class EngieAPI:
             entry.data[CONF_USERNAME],
             entry.data[CONF_PASSWORD],
         )
+        # The config flow stores only a SHA-256 digest of the selected PCE.
+        self._client.set_gas_pce_sha256(entry.options.get("gas_pce_sha256"))
         self._store = Store(hass, STORAGE_VERSION, f"engie_{entry.entry_id}")
         self._obtained_at: float = 0.0
         self._lock = asyncio.Lock()
