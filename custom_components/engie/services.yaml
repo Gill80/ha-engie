@@ -54,3 +54,13 @@ probe_gas:
 probe_gas_headers:
   name: Probe gas session and mobile User-Agent (test only)
   description: Compare six read-only ENGIE gas requests with 10.28.0 and 10.31.0 User-Agent values. Returns only HTTP codes, response metadata and booleans about known cookie names.
+
+probe_gas_meter:
+  name: Probe gas meter selection (temporary test only)
+  description: Compare a SHA-256 digest of a gas PCE against meter references in ENGIE account and contract responses, without returning raw numbers or changing states.
+  fields:
+    pce_sha256:
+      name: SHA-256 of gas PCE
+      required: true
+      selector:
+        text:
