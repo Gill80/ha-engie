@@ -42,7 +42,12 @@ def _load_client():
 
 
 class AccountEnergyGroupTests(unittest.TestCase):
-    def _snapshot(self, *, active_gas: bool = True):
+    def _snapshot(
+        self,
+        *,
+        active_gas: bool = True,
+        selected_ids: list[str] | None = None,
+    ):
         mod = _load_client()
         active_pce = "7" * 14
         retired_pce = "1" * 14
@@ -124,6 +129,8 @@ class AccountEnergyGroupTests(unittest.TestCase):
         client._http = httpx.Client(transport=httpx.MockTransport(handler))
         client._access_token = "fictional-token"
         client.set_gas_pce_sha256(hashlib.sha256(active_pce.encode()).hexdigest())
+        if selected_ids is not None:
+            client.configure_meter_sources("selected", selected_ids)
         try:
             snapshot = client.get_snapshot(daily_days=31)
         finally:
@@ -170,6 +177,21 @@ class AccountEnergyGroupTests(unittest.TestCase):
         )
         self.assertEqual(len(first.meter_sources), 3)
         self.assertIsNone(first.meter_sources[1].price.price_kwh_ttc)
+
+    def test_selected_sources_keep_inventory_but_skip_other_meter_readings(self):
+        active_id = "meter_" + hashlib.sha256(
+            ("TEST_BP|NEW_CC_1234|GAZ|" + "7" * 14).encode()
+        ).hexdigest()[:20]
+        snapshot = self._snapshot(selected_ids=[active_id])
+        groups = snapshot.meter_sources
+        self.assertEqual(len(groups), 3)
+        self.assertEqual(len(groups[1].recent_days), 1)
+        self.assertEqual(len(groups[0].recent_days), 0)
+        self.assertEqual(len(groups[2].recent_days), 0)
+        self.assertEqual(
+            groups[0].price.notes,
+            "Meter source not selected for monitoring",
+        )
 
     def test_no_automatic_source_statistic_import(self):
         source = (ROOT / "statistics.py").read_text()
