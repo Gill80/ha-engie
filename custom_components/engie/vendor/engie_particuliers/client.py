@@ -771,7 +771,9 @@ class EngieClient:
                 )
             )
         points = _consumption_points(payload, energy=kind, granularity=grain)
-        if grain == "day":
+        if grain == "day" and start_ms is None and end_ms is None:
+            # A dated backfill must never append today's partial Linky hours.
+            # This also avoids one redundant hourly API call per history page.
             points = self._with_intraday_day(
                 points,
                 energy=kind,
