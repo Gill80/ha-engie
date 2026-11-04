@@ -850,15 +850,18 @@ class EngieClient:
             raise ValueError("Unknown meter source; refresh the account inventory")
         ref_bp, numero_cc, id_personne, postal, energy = route
         self.select_account(ref_bp, numero_cc, id_personne)
-        return self.get_consumption_points(
+        # Manual historical imports must not turn HTTP errors into empty days.
+        # Keep _try_json's best-effort behavior for optional polling endpoints
+        # (for example, blocked gas estimates). HTTP 204 still yields no rows.
+        payload = self.get_daily_history(
             energy,
-            granularity="day",
             ref_bp=ref_bp,
             compte_contrat=numero_cc,
             code_postal=postal,
             start_ms=start_ms,
             end_ms=end_ms,
         )
+        return _consumption_points(payload, energy=energy, granularity="day")
 
     def get_consumption_points_for_contract(
         self,
