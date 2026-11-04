@@ -201,6 +201,34 @@ def _async_register_services(hass: HomeAssistant) -> None:
         **probe_kwargs,
     )
 
+    async def _dump_engie_api(_call: ServiceCall) -> dict[str, Any]:
+        # Request bodies remain on the HA host; only redacted schemas returned.
+        # This service is temporary and never imports or modifies statistics.
+        from .private_api_dump import dump_engie_api_private
+
+        digest = _call.data["pce_sha256"]
+        for runtime in hass.data.get(DOMAIN, {}).values():
+            if isinstance(runtime, dict) and "api" in runtime:
+                api = runtime["api"]
+                await api.async_ensure_session()
+                return await api._run(
+                    dump_engie_api_private,
+                    api._client,
+                    hass.config.path(),
+                    digest,
+                )
+        return {"error": "no_active_engie_session"}
+
+    hass.services.async_register(
+        DOMAIN,
+        "dump_private_api",
+        _dump_engie_api,
+        schema=vol.Schema({
+            vol.Required("pce_sha256"): vol.Match(r"[0-9a-f]{64}")
+        }),
+        **probe_kwargs,
+    )
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -217,6 +245,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "probe_gas")
         hass.services.async_remove(DOMAIN, "probe_gas_headers")
         hass.services.async_remove(DOMAIN, "probe_gas_meter")
+        hass.services.async_remove(DOMAIN, "dump_private_api")
     return unload_ok
 
 
