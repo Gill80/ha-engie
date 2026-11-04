@@ -58,5 +58,4 @@ def build_meter_source_device_info(entry: ConfigEntry, source: Any) -> DeviceInf
         manufacturer=MANUFACTURER,
         model=model,
         configuration_url="https://particuliers.engie.fr",
-        via_device=(DOMAIN, account_device_id(entry)),
     )
