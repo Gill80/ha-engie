@@ -1419,6 +1419,7 @@ class EngieClient:
         params: dict[str, Any] | None = None,
         json: Any = None,
         demandeur: str = "MOBILE_ANDROID",
+        user_agent: str | None = None,
     ) -> httpx.Response:
         self._require_logged_in()
         self._sync_access_token_cookie()
@@ -1426,7 +1427,7 @@ class EngieClient:
             "Authorization": f"Bearer {self._access_token}",
             "Accept": "*/*",
             "Content-Type": "application/json",
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent if user_agent is not None else USER_AGENT,
             "X-Correlation-ID": str(uuid.uuid4()),
             "demandeur": demandeur,
         }
