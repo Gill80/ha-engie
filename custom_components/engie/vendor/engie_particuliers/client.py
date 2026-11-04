@@ -469,7 +469,7 @@ class EngieClient:
         self._require_logged_in()
         payload = self._api_json(
             "GET",
-            "/dvmobile-ws/api/private/espaceClient/getInfoContrats",
+            "/dvmobile-ws/api/private/espaceClient/v2/getInfoContrats",
             params={"refBP": ref_bp, "compteContrat": compte_contrat},
         )
         if not isinstance(payload, dict):
