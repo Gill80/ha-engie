@@ -48,7 +48,8 @@
           "gas_pce": "PCE du gaz à privilégier (14 chiffres)",
           "clear_gas_pce": "Effacer le PCE privilégié",
           "meter_source_mode": "Sources de consommation à surveiller",
-          "selected_meter_sources": "Compteurs à suivre (si sélection manuelle)"
+          "selected_meter_sources": "Compteurs à suivre (si sélection manuelle)",
+          "legacy_contract_sensors": "Conserver les anciens capteurs par contrat (migration)"
         },
         "description": "Un appareil est détecté par compte ENGIE et par énergie. En mode Tous, chaque compteur détecté est suivi. En mode Sélection, choisissez uniquement les compteurs souhaités. Les anciens capteurs des contrats restent inchangés."
       }
