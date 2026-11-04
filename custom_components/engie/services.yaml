@@ -74,3 +74,13 @@ dump_private_api:
       required: true
       selector:
         text:
+
+probe_gas_across_accounts:
+  name: Compare gas histories across ENGIE accounts (temporary)
+  description: Read-only diagnostic of the same gas API calls using both selected ENGIE accounts, with boolean matching against a SHA-256 digest of the current gas PCE. No response values or account identifiers are exported.
+  fields:
+    pce_sha256:
+      name: SHA-256 of the expected gas PCE
+      required: true
+      selector:
+        text:
