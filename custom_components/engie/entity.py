@@ -42,3 +42,21 @@ def build_contract_device_info(entry: ConfigEntry, price: Any) -> DeviceInfo:
         serial_number=contract_id or None,
         configuration_url="https://particuliers.engie.fr",
     )
+
+def build_meter_source_device_info(entry: ConfigEntry, source: Any) -> DeviceInfo:
+    """One HA device per distinct ENGIE account + energy + meter.
+
+    Source IDs are irreversible hashes; names expose only the last four
+    characters of the contract-account and meter references.
+    """
+    energy = str(getattr(source, "energy", "") or "")
+    model = ENERGY_LABELS.get(energy, energy or "Meter")
+    source_id = str(getattr(source, "source_id", "") or "")
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"meter_source_{source_id}")},
+        name=str(getattr(source, "display_name", "") or f"ENGIE · {model}"),
+        manufacturer=MANUFACTURER,
+        model=model,
+        configuration_url="https://particuliers.engie.fr",
+        via_device=(DOMAIN, account_device_id(entry)),
+    )
