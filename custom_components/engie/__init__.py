@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
@@ -74,6 +76,13 @@ METER_HISTORY_STATUS_SCHEMA = vol.Schema({
     vol.Optional("job_id"): cv.string,
 })
 
+METER_HISTORY_PREVIEW_DATA_SCHEMA = vol.Schema({
+    vol.Required("meter_source_id"): vol.Match(r"^meter_[0-9a-f]{20}$"),
+    vol.Optional("job_id"): cv.string,
+    vol.Optional("offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    vol.Optional("limit", default=250): vol.All(vol.Coerce(int), vol.Range(min=1, max=365)),
+})
+
 
 def _energies(values: list[str] | None) -> set[str] | None:
     if not values:
@@ -98,6 +107,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     _async_register_services(hass)
+    # Serve packaged card assets directly; never copy code into /config/www
+    # or create web-accessible files containing the private preview results.
+    if not hass.data[DOMAIN].get("history_preview_card_registered"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                "/engie/history-preview-card.js",
+                str(Path(__file__).parent / "www" / "history-preview-card.js"),
+                cache_headers=False,
+            )
+        ])
+        hass.data[DOMAIN]["history_preview_card_registered"] = True
     return True
 
 
@@ -269,6 +289,23 @@ def _async_register_services(hass: HomeAssistant) -> None:
         schema=METER_HISTORY_STATUS_SCHEMA, **status_kwargs,
     )
 
+    async def _meter_history_preview_data(call: ServiceCall) -> dict[str, Any]:
+        from .meter_history import get_history_preview_data
+
+        coordinator = _find_history_coordinator(dict(call.data))
+        return get_history_preview_data(
+            hass, coordinator,
+            source_id=call.data["meter_source_id"],
+            job_id=call.data.get("job_id"),
+            offset=call.data.get("offset", 0),
+            limit=call.data.get("limit", 250),
+        )
+
+    hass.services.async_register(
+        DOMAIN, "meter_history_preview_data", _meter_history_preview_data,
+        schema=METER_HISTORY_PREVIEW_DATA_SCHEMA, **status_kwargs,
+    )
+
     async def _probe_gas(_call: ServiceCall) -> dict[str, Any]:
         # On-demand only. No state, long-term statistics or credentials are written.
         from .gas_probe import probe_gas_readonly
@@ -396,6 +433,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, "preview_meter_history")
         hass.services.async_remove(DOMAIN, "import_meter_history")
         hass.services.async_remove(DOMAIN, "meter_history_status")
+        hass.services.async_remove(DOMAIN, "meter_history_preview_data")
         hass.services.async_remove(DOMAIN, "probe_gas")
         hass.services.async_remove(DOMAIN, "probe_gas_headers")
         hass.services.async_remove(DOMAIN, "probe_gas_meter")
