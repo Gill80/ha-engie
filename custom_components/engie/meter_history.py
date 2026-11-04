@@ -28,6 +28,7 @@ from .meter_history_core import (
     local_midnight_ms,
     normalize_daily_points,
     plan_period,
+    preview_daily_rows,
     reconcile_daily,
     select_history_job,
     windows_reverse,
@@ -154,6 +155,7 @@ async def _collect(
         proposals.append({
             "_source": source,
             "_merged": merged,
+            "_preview_rows": preview_daily_rows(existing, fetched),
             "result": {
                 "meter": source.display_name,
                 "energy": source.energy,
@@ -212,6 +214,11 @@ async def _execute(
         "statistics_scope": "engie:meter_* only",
     }
     if preview_only or changed == 0:
+        if preview_only:
+            # Kept out of the report and job-status service response below.
+            report["_preview_rows"] = {
+                p["_source"].source_id: p["_preview_rows"] for p in proposals
+            }
         report["statistics_queued"] = 0
         report["storage_changed"] = False
         return report
@@ -292,6 +299,7 @@ def start_history_job(
     for old_id in list(jobs)[:-8]:
         if jobs[old_id].get("status") != "running":
             jobs.pop(old_id, None)
+            runtime.get("meter_history_previews", {}).pop(old_id, None)
 
     def progress(done: int, total: int) -> None:
         job["windows_completed"] = done
@@ -310,6 +318,11 @@ def start_history_job(
                 preview_only=preview_only,
                 update_progress=progress,
             )
+            # Preview data exist only in memory and never reach Recorder or
+            # the history store. The summary remains small and serializable.
+            preview = result.pop("_preview_rows", None)
+            if preview_only and isinstance(preview, dict):
+                runtime.setdefault("meter_history_previews", {})[job_id] = preview
         except Exception as err:  # noqa: BLE001 - background task must report status
             job["status"] = "failed"
             job["error_type"] = type(err).__name__
@@ -379,3 +392,64 @@ def get_history_job_status(
     """Read the latest or specified job status, optionally per meter."""
     jobs = _runtime(hass, coordinator).get("meter_history_jobs", {})
     return select_history_job(jobs, job_id=job_id, source_id=source_id)
+
+
+def get_history_preview_data(
+    hass: HomeAssistant,
+    coordinator: Any,
+    *,
+    source_id: str,
+    job_id: str | None = None,
+    offset: int = 0,
+    limit: int = 250,
+) -> dict[str, Any]:
+    """Return one page of a completed preview, without touching HA history.
+
+    Restrict the source to the live meter inventory and one configuration,
+    and never return the underlying account, PDL/PCE, or authentication data.
+    """
+    sources = _selected_sources(hass, coordinator, source_id=source_id)
+    if len(sources) != 1:
+        raise HomeAssistantError("Compteur ENGIE inconnu")
+    if offset < 0 or not (1 <= limit <= 365):
+        raise HomeAssistantError("Pagination invalide")
+    runtime = _runtime(hass, coordinator)
+    jobs = runtime.get("meter_history_jobs", {})
+    previews = runtime.get("meter_history_previews", {})
+    candidates = [job_id] if job_id else list(reversed(jobs))
+    for candidate in candidates:
+        job = jobs.get(candidate)
+        if not job or job.get("status") != "completed" or not job.get("preview_only"):
+            continue
+        if source_id not in job.get("source_ids", ()):
+            continue
+        preview = previews.get(candidate, {}).get(source_id)
+        if not isinstance(preview, list):
+            continue
+        meter_report = next(
+            (m for m in (job.get("result") or {}).get("meters", ())
+             if m.get("source_id") == source_id),
+            {},
+        )
+        # Most recent first, matching the table's default date sort.
+        ordered = list(reversed(preview))
+        return {
+            "status": "available",
+            "job_id": candidate,
+            "period_label": job.get("period_label"),
+            "meter": sources[0].display_name,
+            "requested_first": meter_report.get("requested_first"),
+            "requested_last": meter_report.get("requested_last"),
+            "summary": {
+                "daily_readings": meter_report.get("daily_readings", 0),
+                "daily_costs": meter_report.get("daily_costs", 0),
+                "new_days": meter_report.get("new_days", 0),
+                "corrected_days": meter_report.get("corrected_days", 0),
+                "unchanged_days": meter_report.get("unchanged_days", 0),
+            },
+            "total": len(ordered),
+            "offset": offset,
+            "has_more": offset + limit < len(ordered),
+            "rows": ordered[offset : offset + limit],
+        }
+    return {"status": "no_preview", "rows": [], "total": 0}
