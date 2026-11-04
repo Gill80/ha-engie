@@ -21,6 +21,7 @@ def load_metadata_function():
     )
     isolated = ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[]))
     namespace = {
+        "DOMAIN": "engie",
         "STREAM_COST": "cost",
         "STREAM_ENERGY": "energy",
         "UnitOfEnergy": SimpleNamespace(KILO_WATT_HOUR="kWh"),
