@@ -64,3 +64,13 @@ probe_gas_meter:
       required: true
       selector:
         text:
+
+dump_private_api:
+  name: Export complete ENGIE API responses privately (temporary)
+  description: Save complete response bodies of account, contract, meter and gas endpoints under /config/.engie-private-dumps with restricted permissions. Only return anonymized schemas and PCE match booleans. Never share the dump publicly.
+  fields:
+    pce_sha256:
+      name: SHA-256 digest of current gas PCE
+      required: true
+      selector:
+        text:
