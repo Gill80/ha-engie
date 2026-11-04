@@ -330,6 +330,8 @@ class EngieClient:
         self._pending_mfa: Optional[dict[str, Any]] = None
         self._gas_api_diagnostics: dict[str, list[dict[str, Any]]] = {}
         self._gas_pce_sha256: str = ""
+        self._meter_source_mode = "all"
+        self._selected_meter_source_ids: frozenset[str] = frozenset()
 
     def set_gas_pce_sha256(self, digest: str | None) -> None:
         """Select the actual gas meter by a locally configured PCE digest.
@@ -341,6 +343,19 @@ class EngieClient:
         if value and (len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value)):
             raise ValueError("Invalid gas PCE SHA-256 digest")
         self._gas_pce_sha256 = value
+
+    def configure_meter_sources(
+        self, mode: str = "all", source_ids: list[str] | None = None
+    ) -> None:
+        """Monitor every physical meter or a manually selected subset.
+
+        In selected mode, discovery still lists all available meters, but
+        unselected meter-specific history requests are skipped.
+        """
+        if mode not in {"all", "selected"}:
+            raise ValueError("meter_source_mode must be all or selected")
+        self._meter_source_mode = mode
+        self._selected_meter_source_ids = frozenset(source_ids or [])
 
     def _gas_source_for_account(
         self, account: AccountInfo
@@ -976,7 +991,7 @@ class EngieClient:
                     or meter.get("numeroPCE")
                     or ""
                 )
-                if char.isdecimal()
+                if "0" <= char <= "9"
             )
             if len(meter_reference) not in range(10, 18):
                 meter_reference = ""
@@ -995,6 +1010,33 @@ class EngieClient:
             label = f"ENGIE · {energy_label} · CC …{account_tail}"
             if suffix:
                 label += f" · {meter_label} …{suffix}"
+
+            enabled = (
+                self._meter_source_mode == "all"
+                or source_id in self._selected_meter_source_ids
+            )
+            if not enabled:
+                # Keep every discovered meter visible in the selection UI,
+                # without fetching its monthly/daily consumption.
+                sources.append(
+                    MeterSourceSnapshot(
+                        source_id=source_id,
+                        account_id=account_id,
+                        energy=energy,
+                        display_name=label,
+                        account_suffix=account_tail,
+                        meter_suffix=suffix,
+                        declared_contract=matching_contract is not None,
+                        price=ContractPrice(
+                            contract_id=source_id,
+                            libelle=matching_contract.libelle
+                            if matching_contract else energy_label,
+                            energy=energy,
+                            notes="Meter source not selected for monitoring",
+                        ),
+                    )
+                )
+                continue
 
             self.select_account(partner.ref_bp, cc.numero_cc, partner.id_personne)
             # Legacy electricity is read from the correct account already.
