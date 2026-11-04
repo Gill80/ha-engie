@@ -20,7 +20,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTRIBUTION, DOMAIN, UNIT_EUR_KWH
 from .coordinator import EngieCoordinator
-from .entity import build_account_device_info, build_contract_device_info
+from .entity import (
+    build_account_device_info,
+    build_contract_device_info,
+    build_meter_source_device_info,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +218,32 @@ async def async_setup_entry(
                     continue
                 known.add(unique_id)
                 created.append(EngieContractSensor(coordinator, entry, contract_id, spec))
+        # Separate devices for each physical account/energy source.
+        # Legacy contract entities retain their old unique IDs and devices.
+        mode = str(entry.options.get("meter_source_mode") or "all")
+        selected = set(entry.options.get("selected_meter_sources") or [])
+        for source in (snapshot.meter_sources if snapshot else []) or []:
+            if mode == "selected" and source.source_id not in selected:
+                continue
+            if source.price is None:
+                continue
+            # Avoid a synthetic "cumulative" meter. The historical 31-day
+            # rolling sum is not a lifetime total and must not be reported
+            # as TOTAL_INCREASING or imported twice into HA Energy.
+            for spec in _iter_specs(source.price):
+                if spec.source == "energy_total":
+                    continue
+                unique_id = (
+                    f"{entry.entry_id}_{source.source_id}_{spec.unique_suffix}"
+                )
+                if unique_id in known:
+                    continue
+                known.add(unique_id)
+                created.append(
+                    EngieMeterSourceSensor(
+                        coordinator, entry, source.source_id, spec
+                    )
+                )
         for billing in (snapshot.billing if snapshot else []) or []:
             unique_id = f"{entry.entry_id}_{billing.account_id}_balance"
             if unique_id not in known:
@@ -416,6 +446,62 @@ class EngieContractSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
             if str(getattr(cadran, "cadran", "") or "").upper() == wanted:
                 return cadran
         return None
+
+
+class EngieMeterSourceSensor(EngieContractSensor):
+    """One sensor belonging to an exact account/energy physical meter."""
+
+    def __init__(
+        self,
+        coordinator: EngieCoordinator,
+        entry: ConfigEntry,
+        source_id: str,
+        spec: SensorSpec,
+    ) -> None:
+        super().__init__(coordinator, entry, source_id, spec)
+        source = self._source()
+        if source is not None:
+            self._attr_device_info = build_meter_source_device_info(entry, source)
+
+    def _source(self) -> Any | None:
+        snapshot = _snapshot(self.coordinator)
+        if snapshot is None:
+            return None
+        return next(
+            (
+                source
+                for source in snapshot.meter_sources
+                if source.source_id == self._contract_id
+            ),
+            None,
+        )
+
+    def _current_item(self) -> Any | None:
+        return self._source()
+
+    @property
+    def device_info(self):
+        source = self._source()
+        if source is not None:
+            return build_meter_source_device_info(self._entry, source)
+        return getattr(self, "_attr_device_info", None)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs = super().extra_state_attributes
+        source = self._source()
+        if source is not None:
+            attrs.update(
+                {
+                    "account_suffix": source.account_suffix,
+                    "meter_suffix": source.meter_suffix,
+                    "meter_energy": source.energy,
+                    "declared_on_account": source.declared_contract,
+                    "matches_selected_gas_pce": source.matched_selected_pce,
+                    "meter_source": True,
+                }
+            )
+        return attrs
 
 
 class _EngieBillingSensor(CoordinatorEntity[EngieCoordinator], SensorEntity):
