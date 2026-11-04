@@ -12,13 +12,13 @@ import logging
 import time
 from typing import Any
 
-from engie_particuliers.client import EngieClient
-from engie_particuliers.exceptions import (
+from .vendor.engie_particuliers.client import EngieClient
+from .vendor.engie_particuliers.exceptions import (
     ApiError,
     AuthenticationError,
     MfaRequiredError,
 )
-from engie_particuliers.models import AccountSnapshot, ConsumptionPoint, SessionInfo
+from .vendor.engie_particuliers.models import AccountSnapshot, ConsumptionPoint, SessionInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant

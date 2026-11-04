@@ -32,7 +32,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from engie_particuliers.models import AccountSnapshot, ConsumptionPoint
+    from .vendor.engie_particuliers.models import AccountSnapshot, ConsumptionPoint
 
     from .coordinator import EngieCoordinator
 

@@ -8,12 +8,12 @@ from typing import Any
 
 import voluptuous as vol
 
-from engie_particuliers.client import (
+from .vendor.engie_particuliers.client import (
     EngieClient,
     factor_destination,
     factor_needs_challenge,
 )
-from engie_particuliers.exceptions import (
+from .vendor.engie_particuliers.exceptions import (
     ApiError,
     AuthenticationError,
     LockedOutError,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from engie_particuliers.models import PARIS, AccountSnapshot, parse_engie_datetime
+from .vendor.engie_particuliers.models import PARIS, AccountSnapshot, parse_engie_datetime
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
