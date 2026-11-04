@@ -72,12 +72,12 @@ def probe_gas_readonly(client: Any) -> dict[str, Any]:
 
     # Compare the contract details route declared in Android 10.31.0.
     try:
-        client._api_request(
+        response = client._api_request(
             "GET",
             "/dvmobile-ws/api/private/espaceClient/v2/getInfoContrats",
             params={"refBP": partner.ref_bp, "compteContrat": cc.numero_cc},
         )
-        report["contract_v2_http_status"] = 200
+        report["contract_v2_http_status"] = response.status_code
     except (ApiError, httpx.RequestError) as exc:
         report["contract_v2_error"] = _error_summary(exc)
 
