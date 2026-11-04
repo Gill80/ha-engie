@@ -46,3 +46,7 @@ clear_import_history:
       default: true
       selector:
         boolean:
+
+probe_gas:
+  name: Test gas API response (read-only)
+  description: Compare four bounded gas history requests, returning HTTP codes and sanitized response shapes only. No entity, statistic, or credential changes.
