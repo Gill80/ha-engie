@@ -295,6 +295,10 @@ class EngieOptionsFlowHandler(config_entries.OptionsFlow):
                 "meter_source_mode",
                 default=str(current.get("meter_source_mode") or "all"),
             ): vol.In({"all": "All meters", "selected": "Selected meters"}),
+            vol.Optional(
+                "legacy_contract_sensors",
+                default=bool(current.get("legacy_contract_sensors", True)),
+            ): bool,
         }
         if choices:
             schema[vol.Optional(
