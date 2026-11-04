@@ -1011,6 +1011,15 @@ class EngieClient:
             if suffix:
                 label += f" · {meter_label} …{suffix}"
 
+            matched_gas_pce = bool(
+                energy == "GAZ"
+                and meter_reference
+                and self._gas_pce_sha256
+                and hmac.compare_digest(
+                    hashlib.sha256(meter_reference.encode("ascii")).hexdigest(),
+                    self._gas_pce_sha256,
+                )
+            )
             enabled = (
                 self._meter_source_mode == "all"
                 or source_id in self._selected_meter_source_ids
@@ -1027,6 +1036,7 @@ class EngieClient:
                         account_suffix=account_tail,
                         meter_suffix=suffix,
                         declared_contract=matching_contract is not None,
+                        matched_selected_pce=matched_gas_pce,
                         price=ContractPrice(
                             contract_id=source_id,
                             libelle=matching_contract.libelle
@@ -1093,15 +1103,7 @@ class EngieClient:
                     account_suffix=account_tail,
                     meter_suffix=suffix,
                     declared_contract=matching_contract is not None,
-                    matched_selected_pce=bool(
-                        energy == "GAZ"
-                        and meter_reference
-                        and self._gas_pce_sha256
-                        and hmac.compare_digest(
-                            hashlib.sha256(meter_reference.encode("ascii")).hexdigest(),
-                            self._gas_pce_sha256,
-                        )
-                    ),
+                    matched_selected_pce=matched_gas_pce,
                     price=source_price,
                     last_day=_latest_consumption(recent, complete_only=True),
                     today=next(
