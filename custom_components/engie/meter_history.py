@@ -308,15 +308,23 @@ def start_history_job(
         except Exception as err:  # noqa: BLE001 - background task must report status
             job["status"] = "failed"
             job["error_type"] = type(err).__name__
+            # The exception body may contain account information or tokens.
+            # Only expose a validated HTTP status and a technical error type.
+            status_code = getattr(err, "status_code", None)
+            if type(status_code) is int and 100 <= status_code <= 599:
+                job["http_status"] = status_code
+                error_label = f"HTTP {status_code} ({type(err).__name__})"
+            else:
+                error_label = type(err).__name__
             _LOGGER.warning(
-                "ENGIE history job %s failed (%s)",
-                job_id, type(err).__name__,
+                "ENGIE history job %s failed: %s", job_id, error_label
             )
             await _notify(
                 hass,
                 "La récupération a échoué. Aucun historique n'a été importé "
                 "si l'erreur s'est produite pendant le téléchargement. "
-                f"Type d'erreur : {type(err).__name__}.",
+                f"Erreur : {error_label}. "
+                "Consultez l'action engie.meter_history_status pour le suivi.",
                 "ENGIE · Import d'historique",
             )
             return
