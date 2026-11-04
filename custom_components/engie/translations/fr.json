@@ -44,8 +44,13 @@
       "init": {
         "title": "Options ENGIE Particuliers",
         "data": {
-          "scan_interval": "Intervalle de rafraîchissement des prix (secondes)"
-        }
+          "scan_interval": "Intervalle de rafraîchissement des prix (secondes)",
+          "gas_pce": "PCE du gaz à privilégier (14 chiffres)",
+          "clear_gas_pce": "Effacer le PCE privilégié",
+          "meter_source_mode": "Sources de consommation à surveiller",
+          "selected_meter_sources": "Compteurs à suivre (si sélection manuelle)"
+        },
+        "description": "Un appareil est détecté par compte ENGIE et par énergie. En mode Tous, chaque compteur détecté est suivi. En mode Sélection, choisissez uniquement les compteurs souhaités. Les anciens capteurs des contrats restent inchangés."
       }
     }
   },
@@ -63,78 +68,78 @@
       "cadran_price_kwh_ttc": {
         "name": "Prix kWh TTC {cadran}"
       },
-            "cadran_price_kwh_ht": {
-                "name": "Prix kWh HT {cadran}"
-            },
-            "last_day_kwh": {
-                "name": "Conso quotidienne"
-            },
-            "last_day_cost": {
-                "name": "Coût TTC quotidien"
-            },
-            "daily_consumption": {
-                "name": "Conso quotidienne"
-            },
-            "daily_cost": {
-                "name": "Coût TTC quotidien"
-            },
-            "today_consumption": {
-                "name": "Conso du jour"
-            },
-            "energy": {
-                "name": "Énergie"
-            },
-            "balance": {
-                "name": "Solde à payer"
-            },
-            "next_invoice": {
-                "name": "Prochaine facture"
-            },
-            "last_invoice": {
-                "name": "Dernière facture TTC"
-            }
-        },
-        "binary_sensor": {
-            "authentication": {
-                "name": "Authentifié"
-            },
-            "energy_cut": {
-                "name": "Énergie coupée"
-            }
-        }
+      "cadran_price_kwh_ht": {
+        "name": "Prix kWh HT {cadran}"
+      },
+      "last_day_kwh": {
+        "name": "Conso quotidienne"
+      },
+      "last_day_cost": {
+        "name": "Coût TTC quotidien"
+      },
+      "daily_consumption": {
+        "name": "Conso quotidienne"
+      },
+      "daily_cost": {
+        "name": "Coût TTC quotidien"
+      },
+      "today_consumption": {
+        "name": "Conso du jour"
+      },
+      "energy": {
+        "name": "Énergie"
+      },
+      "balance": {
+        "name": "Solde à payer"
+      },
+      "next_invoice": {
+        "name": "Prochaine facture"
+      },
+      "last_invoice": {
+        "name": "Dernière facture TTC"
+      }
     },
-    "services": {
-        "import_history": {
-            "name": "Importer l’historique de conso",
-            "description": "Importe la consommation quotidienne d’électricité et de gaz dans les statistiques long terme pour le tableau de bord Énergie.",
-            "fields": {
-                "energy": {
-                    "name": "Énergie",
-                    "description": "Énergies à importer. Vide = tous les contrats."
-                },
-                "days": {
-                    "name": "Jours",
-                    "description": "Profondeur de l’historique quotidien."
-                },
-                "include_costs": {
-                    "name": "Inclure les coûts",
-                    "description": "Importer aussi les euros TTC facturés."
-                }
-            }
-        },
-        "clear_import_history": {
-            "name": "Effacer l’historique importé",
-            "description": "Supprime les statistiques ENGIE déjà importées dans l’enregistreur.",
-            "fields": {
-                "energy": {
-                    "name": "Énergie",
-                    "description": "Énergies à effacer. Vide = tous les contrats."
-                },
-                "include_costs": {
-                    "name": "Inclure les coûts",
-                    "description": "Supprimer aussi les statistiques de coût."
-                }
-            }
-        }
+    "binary_sensor": {
+      "authentication": {
+        "name": "Authentifié"
+      },
+      "energy_cut": {
+        "name": "Énergie coupée"
+      }
     }
+  },
+  "services": {
+    "import_history": {
+      "name": "Importer l’historique de conso",
+      "description": "Importe la consommation quotidienne d’électricité et de gaz dans les statistiques long terme pour le tableau de bord Énergie.",
+      "fields": {
+        "energy": {
+          "name": "Énergie",
+          "description": "Énergies à importer. Vide = tous les contrats."
+        },
+        "days": {
+          "name": "Jours",
+          "description": "Profondeur de l’historique quotidien."
+        },
+        "include_costs": {
+          "name": "Inclure les coûts",
+          "description": "Importer aussi les euros TTC facturés."
+        }
+      }
+    },
+    "clear_import_history": {
+      "name": "Effacer l’historique importé",
+      "description": "Supprime les statistiques ENGIE déjà importées dans l’enregistreur.",
+      "fields": {
+        "energy": {
+          "name": "Énergie",
+          "description": "Énergies à effacer. Vide = tous les contrats."
+        },
+        "include_costs": {
+          "name": "Inclure les coûts",
+          "description": "Supprimer aussi les statistiques de coût."
+        }
+      }
+    }
+  }
 }
