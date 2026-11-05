@@ -62,6 +62,18 @@ async def async_get_config_entry_diagnostics(
                 "recouvrement": item.balance.recouvrement,
             }
         )
+    meter_sources: list[dict[str, Any]] = []
+    for source in (snapshot.meter_sources if snapshot else []) or []:
+        meter_sources.append({
+            "energy": source.energy,
+            "declared_contract": source.declared_contract,
+            "matches_selected_gas_pce": source.matched_selected_pce,
+            "has_meter_reference_suffix": bool(source.meter_suffix),
+            "recent_days": len(source.recent_days),
+            "has_price_ttc": bool(
+                source.price and source.price.price_kwh_ttc is not None
+            ),
+        })
     return {
         "entry": {
             "title": "**REDACTED**",
@@ -80,4 +92,10 @@ async def async_get_config_entry_diagnostics(
         },
         "contracts": contracts,
         "billing": billing,
+        "meter_sources": meter_sources,
+        # The library only supplies allowlisted schema keys and transport
+        # metadata; it never contains account IDs, tokens, URLs, or values.
+        "gas_api": (
+            coordinator.api.gas_api_diagnostics if coordinator is not None else {}
+        ),
     }

@@ -32,7 +32,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from engie_particuliers.models import AccountSnapshot, ConsumptionPoint
+    from .vendor.engie_particuliers.models import AccountSnapshot, ConsumptionPoint
 
     from .coordinator import EngieCoordinator
 
@@ -62,8 +62,9 @@ def _metadata(contract_id: str, stream: str, name: str) -> StatisticMetaData:
         "statistic_id": statistic_id(contract_id, stream),
         "unit_of_measurement": unit,
     }
-    if unit_class:
-        kwargs["unit_class"] = unit_class
+    # Home Assistant 2026.11 requires the key even for monetary statistics,
+    # for which there is no unit-conversion class (None is intentional).
+    kwargs["unit_class"] = unit_class
     try:
         from homeassistant.components.recorder.models import StatisticMeanType
 
@@ -222,12 +223,18 @@ async def async_import_history(
 
 
 async def async_heal_recent(
-    hass: Any, coordinator: EngieCoordinator, snapshot: AccountSnapshot
+    hass: Any,
+    coordinator: EngieCoordinator,
+    snapshot: AccountSnapshot,
+    *,
+    energies: set[str] | None = None,
 ) -> int:
     """Overwrite the last few daily rows so late Linky data lands."""
     total = 0
     for item in snapshot.contracts:
         price = item.price
+        if energies and str(getattr(price, "energy", "")) not in energies:
+            continue
         contract_id = str(getattr(price, "contract_id", "") or "")
         if not contract_id:
             continue

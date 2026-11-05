@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Any
 
 import voluptuous as vol
 
-from engie_particuliers.client import (
+from .vendor.engie_particuliers.client import (
     EngieClient,
     factor_destination,
     factor_needs_challenge,
 )
-from engie_particuliers.exceptions import (
+from .vendor.engie_particuliers.exceptions import (
     ApiError,
     AuthenticationError,
     LockedOutError,
@@ -24,6 +25,7 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
+from homeassistant.helpers import config_validation as cv
 
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
@@ -236,22 +238,73 @@ class EngieConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class EngieOptionsFlowHandler(config_entries.OptionsFlow):
+    def _meter_source_choices(self) -> dict[str, str]:
+        """Get the current detected source catalog for this configuration.
+
+        The dropdown contains only hashed source IDs and masked labels.
+        """
+        runtime = (
+            self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id) or {}
+        )
+        coordinator = runtime.get("coordinator")
+        snapshot = getattr(coordinator, "data", None)
+        return {
+            source.source_id: source.display_name
+            for source in (getattr(snapshot, "meter_sources", None) or [])
+        }
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            options = dict(user_input)
+            gas_pce = str(options.pop("gas_pce", "") or "").strip()
+            clear_gas_pce = bool(options.pop("clear_gas_pce", False))
+            if gas_pce:
+                options["gas_pce_sha256"] = hashlib.sha256(
+                    gas_pce.encode("ascii")
+                ).hexdigest()
+            elif not clear_gas_pce:
+                existing = self.config_entry.options.get("gas_pce_sha256")
+                if existing:
+                    options["gas_pce_sha256"] = existing
+            # Preserve previous source choices when the catalog is not
+            # currently accessible (e.g. during a reload).
+            if "selected_meter_sources" not in options:
+                options["selected_meter_sources"] = list(
+                    self.config_entry.options.get("selected_meter_sources") or []
+                )
+            return self.async_create_entry(title="", data=options)
         current = self.config_entry.options
+        choices = self._meter_source_choices()
+        stored_selection = current.get("selected_meter_sources")
+        current_selection = (
+            list(choices) if stored_selection is None else list(stored_selection)
+        )
+        current_selection = [
+            source_id for source_id in current_selection if source_id in choices
+        ]
+        schema: dict[Any, Any] = {
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=int(current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+            ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+            vol.Optional("gas_pce"): vol.All(str, vol.Match(r"^[0-9]{14}$")),
+            vol.Optional("clear_gas_pce", default=False): bool,
+            vol.Optional(
+                "meter_source_mode",
+                default=str(current.get("meter_source_mode") or "all"),
+            ): vol.In({"all": "All meters", "selected": "Selected meters"}),
+            vol.Optional(
+                "legacy_contract_sensors",
+                default=bool(current.get("legacy_contract_sensors", True)),
+            ): bool,
+        }
+        if choices:
+            schema[vol.Optional(
+                "selected_meter_sources", default=current_selection
+            )] = cv.multi_select(choices)
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_SCAN_INTERVAL,
-                        default=int(
-                            current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-                        ),
-                    ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
-                }
-            ),
+            data_schema=vol.Schema(schema),
         )

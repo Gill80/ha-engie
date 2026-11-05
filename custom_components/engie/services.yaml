@@ -46,3 +46,166 @@ clear_import_history:
       default: true
       selector:
         boolean:
+
+probe_gas:
+  name: Test gas API response (read-only)
+  description: Compare four bounded gas history requests, returning HTTP codes and sanitized response shapes only. No entity, statistic, or credential changes.
+
+probe_gas_headers:
+  name: Probe gas session and mobile User-Agent (test only)
+  description: Compare six read-only ENGIE gas requests with 10.28.0 and 10.31.0 User-Agent values. Returns only HTTP codes, response metadata and booleans about known cookie names.
+
+probe_gas_meter:
+  name: Probe gas meter selection (temporary test only)
+  description: Compare a SHA-256 digest of a gas PCE against meter references in ENGIE account and contract responses, without returning raw numbers or changing states.
+  fields:
+    pce_sha256:
+      name: SHA-256 of gas PCE
+      required: true
+      selector:
+        text:
+
+dump_private_api:
+  name: Export complete ENGIE API responses privately (temporary)
+  description: Save complete response bodies of account, contract, meter and gas endpoints under /config/.engie-private-dumps with restricted permissions. Only return anonymized schemas and PCE match booleans. Never share the dump publicly.
+  fields:
+    pce_sha256:
+      name: SHA-256 digest of current gas PCE
+      required: true
+      selector:
+        text:
+
+probe_gas_across_accounts:
+  name: Compare gas histories across ENGIE accounts (temporary)
+  description: Read-only diagnostic of the same gas API calls using both selected ENGIE accounts, with boolean matching against a SHA-256 digest of the current gas PCE. No response values or account identifiers are exported.
+  fields:
+    pce_sha256:
+      name: SHA-256 of the expected gas PCE
+      required: true
+      selector:
+        text:
+
+
+preview_meter_history:
+  name: Prévisualiser les historiques d'un compteur
+  description: Examine les données disponibles chez ENGIE, sans écrire de statistique. Résultat dans une notification, et détails via engie.meter_history_status.
+  fields:
+    meter_entity:
+      name: Capteur du compteur ENGIE
+      description: Choisir n'importe quel capteur appartenant au compteur. Laisser vide pour tous les compteurs ENGIE de cette intégration.
+      selector:
+        entity:
+          filter:
+            - integration: engie
+              domain: sensor
+    period:
+      name: Période
+      default: 365_days
+      selector:
+        select:
+          options:
+            - label: 90 derniers jours
+              value: 90_days
+            - label: 12 derniers mois
+              value: 365_days
+            - label: Tout l'historique disponible (recherche sur 10 ans max.)
+              value: all_available
+            - label: Dates personnalisées
+              value: custom
+    start_date:
+      name: Date de début (période personnalisée)
+      example: "2025-01-01"
+      selector:
+        date:
+    end_date:
+      name: Date de fin (période personnalisée)
+      example: "2025-12-31"
+      selector:
+        date:
+    include_costs:
+      name: Inclure les coûts TTC
+      default: true
+      selector:
+        boolean:
+
+import_meter_history:
+  name: Récupérer l'historique d'un compteur
+  description: Importe les journées ENGIE dans des statistiques externes engie:meter_* exclusivement. N'altère pas les compteurs Linky, LiXee, ZiPulses ni les préférences du tableau Énergie. La tâche démarre en arrière-plan et notifie la fin.
+  fields:
+    meter_entity:
+      name: Capteur du compteur ENGIE
+      description: Choisir n'importe quel capteur appartenant au compteur. Laisser vide pour tous les compteurs de cette intégration.
+      selector:
+        entity:
+          filter:
+            - integration: engie
+              domain: sensor
+    period:
+      name: Période
+      default: 365_days
+      selector:
+        select:
+          options:
+            - label: 90 derniers jours
+              value: 90_days
+            - label: 12 derniers mois
+              value: 365_days
+            - label: Tout l'historique disponible (10 ans maximum)
+              value: all_available
+            - label: Dates personnalisées
+              value: custom
+    start_date:
+      name: Date de début (si dates personnalisées)
+      example: "2025-01-01"
+      selector:
+        date:
+    end_date:
+      name: Date de fin (si dates personnalisées)
+      example: "2025-12-31"
+      selector:
+        date:
+    include_costs:
+      name: Importer aussi les coûts TTC
+      default: true
+      selector:
+        boolean:
+
+meter_history_status:
+  name: État de récupération ENGIE
+  description: Affiche la progression et le bilan du dernier import ou de la dernière prévisualisation.
+  fields:
+    job_id:
+      name: Identifiant de tâche (optionnel)
+      selector:
+        text:
+
+
+meter_history_preview_data:
+  name: Consulter les journées prévisualisées
+  description: Lit une page de la dernière prévisualisation réussie du compteur ENGIE. Aucune donnée n'est enregistrée ni importée.
+  fields:
+    meter_source_id:
+      name: Identifiant technique du compteur
+      required: true
+      selector:
+        text:
+    job_id:
+      name: Identifiant de tâche (optionnel)
+      selector:
+        text:
+    offset:
+      name: Décalage de pagination
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3653
+          mode: box
+    limit:
+      name: Nombre de journées par réponse
+      default: 250
+      selector:
+        number:
+          min: 1
+          max: 365
+          mode: box

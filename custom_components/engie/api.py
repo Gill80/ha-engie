@@ -12,13 +12,13 @@ import logging
 import time
 from typing import Any
 
-from engie_particuliers.client import EngieClient
-from engie_particuliers.exceptions import (
+from .vendor.engie_particuliers.client import EngieClient
+from .vendor.engie_particuliers.exceptions import (
     ApiError,
     AuthenticationError,
     MfaRequiredError,
 )
-from engie_particuliers.models import AccountSnapshot, ConsumptionPoint, SessionInfo
+from .vendor.engie_particuliers.models import AccountSnapshot, ConsumptionPoint, SessionInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -41,6 +41,12 @@ class EngieAPI:
         self._client = EngieClient(
             entry.data[CONF_USERNAME],
             entry.data[CONF_PASSWORD],
+        )
+        # The config flow stores only a SHA-256 digest of the selected PCE.
+        self._client.set_gas_pce_sha256(entry.options.get("gas_pce_sha256"))
+        self._client.configure_meter_sources(
+            str(entry.options.get("meter_source_mode") or "all"),
+            list(entry.options.get("selected_meter_sources") or []),
         )
         self._store = Store(hass, STORAGE_VERSION, f"engie_{entry.entry_id}")
         self._obtained_at: float = 0.0
@@ -115,6 +121,14 @@ class EngieAPI:
     def authenticated(self) -> bool:
         return bool(self._session_dict().get("access_token"))
 
+    @property
+    def gas_api_diagnostics(self) -> dict[str, list[dict[str, Any]]]:
+        """Return redacted technical gas endpoint results when supported.
+
+        Safe with the existing PyPI ha-engie-api, which lacks this feature.
+        """
+        return getattr(self._client, "gas_api_diagnostics", {})
+
     async def async_get_prices(self) -> list[Any]:
         snapshot = await self.async_get_snapshot()
         return [item.price for item in snapshot.contracts]
@@ -154,6 +168,33 @@ class EngieAPI:
                     contract_id,
                     granularity=granularity,
                     days=days,
+                )
+            raise
+
+    async def async_get_meter_source_points(
+        self,
+        source_id: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[ConsumptionPoint]:
+        """Get dated daily history for one independently discovered meter."""
+        await self.async_ensure_session()
+        try:
+            return await self._run(
+                self._client.get_consumption_points_for_meter_source,
+                source_id,
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+        except ApiError as err:
+            if getattr(err, "status_code", 0) in {401, 403}:
+                await self._async_refresh()
+                return await self._run(
+                    self._client.get_consumption_points_for_meter_source,
+                    source_id,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
                 )
             raise
 
